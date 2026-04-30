@@ -67,7 +67,6 @@ export const useStore = create<Store>((set, get) => ({
     if (last === monthKey) return
     const { fixedCosts, addTransactions } = get()
     if (fixedCosts.length === 0) return
-    const today = new Date()
     addTransactions(
       fixedCosts.map((fc) => ({
         amount: fc.amount,

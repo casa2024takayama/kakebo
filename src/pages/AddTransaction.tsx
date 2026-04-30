@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera, PenLine, Loader2 } from 'lucide-react'
 import { useStore } from '../store'
-import { currentMonthKey } from '../lib/budget'
 import { readReceipt } from '../lib/ai'
 
 export default function AddTransaction() {

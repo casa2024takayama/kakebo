@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Download, Trash2, ChevronRight } from 'lucide-react'
+import { Eye, EyeOff, Download, ChevronRight } from 'lucide-react'
 import { useStore } from '../store'
 
 export default function AppSettings() {

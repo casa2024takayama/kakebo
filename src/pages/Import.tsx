@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Upload, Check, X, AlertCircle } from 'lucide-react'
+import { Upload, Check, AlertCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { parseCsv } from '../lib/csv'
 import type { Transaction } from '../types'
@@ -14,7 +14,6 @@ export default function Import() {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
-  const catMap = Object.fromEntries(categories.map((c) => [c.id, c]))
   const rules = categories.map((c) => ({ keyword: c.name, categoryId: c.id }))
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

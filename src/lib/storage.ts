@@ -37,7 +37,7 @@ export const storage = {
   getTransactions: () => load<Transaction[]>(KEYS.transactions, []),
   saveTransactions: (v: Transaction[]) => save(KEYS.transactions, v),
 
-  getFixedCosts: () => load<FixedCost[]>(KEYS.fixed_costs ?? KEYS.fixedCosts, []),
+  getFixedCosts: () => load<FixedCost[]>(KEYS.fixedCosts, []),
   saveFixedCosts: (v: FixedCost[]) => save(KEYS.fixedCosts, v),
 
   getSettings: () =>

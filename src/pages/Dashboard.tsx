@@ -64,10 +64,10 @@ export default function Dashboard() {
         }`}
       >
         <p className="text-sm opacity-80">今月の残り</p>
-        <p className="text-5xl font-bold mt-1">
+        <p className="text-4xl font-bold mt-1 truncate">
           ¥{fmt(Math.max(remaining, 0))}
         </p>
-        <div className="mt-4 flex justify-between text-sm opacity-80">
+        <div className="mt-4 flex justify-between text-xs opacity-80 gap-2">
           <span>残り{remainingDays}日</span>
           <span>今日の上限 ¥{fmt(todayLimit)}</span>
         </div>
