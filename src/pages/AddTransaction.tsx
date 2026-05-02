@@ -43,7 +43,7 @@ export default function AddTransaction() {
         setScanning(false)
       }
       reader.readAsDataURL(file)
-    } catch (err) {
+    } catch {
       setError('レシートの読み取りに失敗しました')
       setScanning(false)
     }

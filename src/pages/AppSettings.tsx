@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Download, ChevronRight } from 'lucide-react'
+import { Eye, EyeOff, Download, ChevronRight, Moon } from 'lucide-react'
 import { useStore } from '../store'
 
 export default function AppSettings() {
@@ -62,6 +62,21 @@ export default function AppSettings() {
         >
           {saved ? '保存しました ✓' : '保存'}
         </button>
+      </section>
+
+      {/* ダークモード */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Moon size={16} className="text-gray-500" /> ダークモード
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.darkMode}
+            onChange={(e) => setSettings({ ...settings, darkMode: e.target.checked })}
+            className="w-5 h-5 accent-accent"
+          />
+        </label>
       </section>
 
       {/* 予算設定へのリンク */}

@@ -88,9 +88,12 @@ export default function Budget() {
                 </div>
               </div>
             ) : (
-              <button
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+              <div
+                role="button"
+                tabIndex={0}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer"
                 onClick={() => startEdit(cat)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') startEdit(cat) }}
               >
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                 <span className="flex-1 text-sm font-medium">{cat.name}</span>
@@ -102,7 +105,7 @@ export default function Budget() {
                 >
                   <Trash2 size={15} />
                 </button>
-              </button>
+              </div>
             )}
           </div>
         ))}
