@@ -14,6 +14,12 @@ export type Transaction = {
   source: 'manual' | 'csv' | 'receipt'
   /** Phase 1: 任意フィールド。未指定は現金/カード未割当扱い */
   cardId?: string
+  /** Phase 1.5: 個別取引 or 請求一括（未指定は個別とみなす） */
+  kind?: 'individual' | 'bulk'
+  /** Phase 1.5: 請求一括の請求月（'YYYY-MM'） */
+  billingMonth?: string
+  /** Phase 1.5: 引落計算から除外（記録のみ）。請求一括との重複制御に使用 */
+  excludeFromWithdrawal?: boolean
 }
 
 export type FixedCost = {
@@ -73,6 +79,32 @@ export type BillingCycle = {
 export type WithdrawalForecast = {
   group: BillingGroup
   cycle: BillingCycle
+}
+
+/** Phase 1.5: カードマスタ（ビルトイン定義） */
+export type CardMaster = {
+  /** カード/ブランド名 */
+  name: string
+  /** 発行元 */
+  issuer: string
+  /** 締め日 */
+  closingDay: DaySpec
+  /** 引落日 */
+  withdrawalDay: DaySpec
+  /** 引落月オフセット（締め月から何ヶ月後か。多くは1） */
+  withdrawalMonthOffset: number
+  /** 補足メモ */
+  notes?: string
+}
+
+/** Phase 1.5: 引落集中アラート */
+export type ConcentrationAlert = {
+  /** 引落日（YYYY-MM-DD） */
+  date: string
+  /** 同日に引き落とされる予定 */
+  forecasts: WithdrawalForecast[]
+  /** 合計額 */
+  total: number
 }
 
 /** 当月収支サマリ */

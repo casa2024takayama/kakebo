@@ -1,4 +1,5 @@
 import type { BillingGroup, DaySpec } from '../types'
+import holiday_jp from '@holiday-jp/holiday_jp'
 
 /**
  * 締め日サイクル計算
@@ -29,10 +30,13 @@ function parseISO(s: string): { y: number; m0: number; d: number } {
   return { y, m0: m - 1, d }
 }
 
-/** 土日のみの営業日判定（祝日は Phase 1 では考慮せず） */
+/** 土日 + 日本の祝日を除外する営業日判定 */
 function isBusinessDay(year: number, month0: number, day: number): boolean {
-  const dow = new Date(year, month0, day).getDay()
-  return dow !== 0 && dow !== 6
+  const date = new Date(year, month0, day)
+  const dow = date.getDay()
+  if (dow === 0 || dow === 6) return false
+  if (holiday_jp.isHoliday(date)) return false
+  return true
 }
 
 /** 翌営業日に繰延 */

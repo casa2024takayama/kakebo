@@ -5,8 +5,19 @@ import type {
   BillingCycle,
   WithdrawalForecast,
   MonthlyDeficit,
+  ConcentrationAlert,
 } from '../types'
 import { getCycleForTransaction } from './billingCycle'
+
+/**
+ * Phase 1.5: forecast 計算対象の取引かを判定。
+ * - 個別取引で excludeFromWithdrawal=true のものは除外（記録のみ）
+ * - 請求一括（kind='bulk'）はそのまま集計対象
+ */
+function isForecastTarget(t: Transaction): boolean {
+  if (t.kind === 'bulk') return true
+  return t.excludeFromWithdrawal !== true
+}
 
 function cardToGroup(cards: Card[]): Map<string, string> {
   const m = new Map<string, string>()
@@ -30,11 +41,20 @@ export function getUpcomingWithdrawals(
 
   for (const t of transactions) {
     if (!t.cardId) continue
+    if (!isForecastTarget(t)) continue
     const groupId = c2g.get(t.cardId)
     if (!groupId) continue
     const group = groups.find((g) => g.id === groupId)
     if (!group) continue
-    const cyc = getCycleForTransaction(t.date, group)
+    // 請求一括は billingMonth から該当月の引落サイクルを推定する
+    let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
+    if (t.kind === 'bulk' && t.billingMonth) {
+      // billingMonth の中央あたりの日付で近似（締め期間の中身を引っ張ればよい）
+      const approxDate = `${t.billingMonth}-15`
+      cyc = getCycleForTransaction(approxDate, group)
+    } else {
+      cyc = getCycleForTransaction(t.date, group)
+    }
     let g = buckets.get(groupId)
     if (!g) {
       g = new Map()
@@ -114,6 +134,7 @@ export function getMonthlyDeficit(
 
   let totalOut = 0
   for (const t of transactions) {
+    if (!isForecastTarget(t)) continue
     if (!t.cardId) {
       // 現金/未割当は当月利用日基準で当月キャッシュフロー扱い
       if (t.date.startsWith(yyyymm)) totalOut += t.amount
@@ -126,7 +147,12 @@ export function getMonthlyDeficit(
     }
     const group = groups.find((g) => g.id === groupId)
     if (!group) continue
-    const cyc = getCycleForTransaction(t.date, group)
+    let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
+    if (t.kind === 'bulk' && t.billingMonth) {
+      cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
+    } else {
+      cyc = getCycleForTransaction(t.date, group)
+    }
     if (cyc.withdrawalDate.startsWith(yyyymm)) {
       totalOut += t.amount
     }
@@ -148,3 +174,31 @@ export function getMonthlyDeficit(
 
   return { totalOut, income, balance, status }
 }
+
+/**
+ * Phase 1.5: 同一日に2件以上の引落がある日を検出。
+ * Dashboard で「引落集中」アラートを出すために使用。
+ */
+export function getConcentrationAlerts(
+  forecasts: WithdrawalForecast[],
+): ConcentrationAlert[] {
+  const byDate = new Map<string, WithdrawalForecast[]>()
+  for (const f of forecasts) {
+    if (f.cycle.total <= 0) continue
+    const arr = byDate.get(f.cycle.withdrawalDate) ?? []
+    arr.push(f)
+    byDate.set(f.cycle.withdrawalDate, arr)
+  }
+  const alerts: ConcentrationAlert[] = []
+  for (const [date, list] of byDate.entries()) {
+    if (list.length >= 2) {
+      alerts.push({
+        date,
+        forecasts: list,
+        total: list.reduce((s, f) => s + f.cycle.total, 0),
+      })
+    }
+  }
+  return alerts.sort((a, b) => a.date.localeCompare(b.date))
+}
+

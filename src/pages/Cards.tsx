@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Pencil, Check, X } from 'lucide-react'
 import { useStore } from '../store'
 import type { BillingGroup, Card, DaySpec } from '../types'
+import { CARD_MASTERS } from '../lib/cardMasters'
 
 function daySpecToInput(d: DaySpec): string {
   return d === 'last' ? 'last' : String(d)
@@ -14,16 +15,21 @@ function inputToDaySpec(s: string): DaySpec {
   return 1
 }
 
-function GroupEditor({ group }: { group: BillingGroup }) {
-  const upsert = useStore((s) => s.upsertBillingGroup)
+function GroupHeader({ group }: { group: BillingGroup }) {
+  const { upsertBillingGroup, deleteBillingGroup, cards } = useStore()
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(group.name)
   const [closing, setClosing] = useState(daySpecToInput(group.closingDay))
   const [withdraw, setWithdraw] = useState(daySpecToInput(group.withdrawalDay))
   const [account, setAccount] = useState(group.withdrawalAccount ?? '')
-  const [editing, setEditing] = useState(false)
+
+  const groupCardCount = cards.filter((c) => c.billingGroupId === group.id).length
 
   const save = () => {
-    upsert({
+    if (!name.trim()) return
+    upsertBillingGroup({
       ...group,
+      name: name.trim(),
       closingDay: inputToDaySpec(closing),
       withdrawalDay: inputToDaySpec(withdraw),
       withdrawalAccount: account || undefined,
@@ -31,26 +37,48 @@ function GroupEditor({ group }: { group: BillingGroup }) {
     setEditing(false)
   }
 
+  const handleDelete = () => {
+    const msg =
+      groupCardCount > 0
+        ? `${group.name} を削除しますか？\n紐付くカード ${groupCardCount}枚 も同時に削除されます。`
+        : `${group.name} を削除しますか？`
+    if (confirm(msg)) deleteBillingGroup(group.id)
+  }
+
   if (!editing) {
     return (
-      <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-        <span>
+      <div>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">{group.name}</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">{groupCardCount}枚</span>
+            <button onClick={() => setEditing(true)} className="text-gray-500">
+              <Pencil size={14} />
+            </button>
+            <button onClick={handleDelete} className="text-danger">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
           {group.closingDay === 'last' ? '末日' : `${group.closingDay}日`}締め /
           翌月{group.withdrawalDay === 'last' ? '末日' : `${group.withdrawalDay}日`}引落
           {group.withdrawalAccount ? ` / ${group.withdrawalAccount}` : ''}
-        </span>
-        <button
-          onClick={() => setEditing(true)}
-          className="text-accent flex items-center gap-1"
-        >
-          <Pencil size={12} /> 編集
-        </button>
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="mt-2 space-y-2 bg-gray-50 rounded-lg p-3">
+    <div className="space-y-2 bg-gray-50 rounded-lg p-3">
+      <label className="text-xs text-gray-600 block">
+        グループ名
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
+        />
+      </label>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-gray-600">
           締め日
@@ -178,7 +206,7 @@ function AddCardForm({ groupId }: { groupId: string }) {
         onClick={() => setOpen(true)}
         className="w-full mt-2 border border-dashed border-accent/40 text-accent rounded-lg py-2 text-xs flex items-center justify-center gap-1"
       >
-        <Plus size={14} /> カードを追加
+        <Plus size={14} /> このグループにカードを追加
       </button>
     )
   }
@@ -216,32 +244,163 @@ function AddCardForm({ groupId }: { groupId: string }) {
   )
 }
 
+function MasterPickerModal({
+  onClose,
+}: {
+  onClose: () => void
+}) {
+  const { addBillingGroup, addCard } = useStore()
+
+  const handlePick = (idx: number) => {
+    const m = CARD_MASTERS[idx]
+    const groupId = addBillingGroup({
+      name: m.name,
+      closingDay: m.closingDay,
+      withdrawalDay: m.withdrawalDay,
+    })
+    addCard({ name: m.name, billingGroupId: groupId })
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+        <div className="px-4 py-3 border-b flex items-center justify-between sticky top-0 bg-white">
+          <h3 className="font-semibold">カードマスタから追加</h3>
+          <button onClick={onClose} className="text-gray-500">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-3 space-y-2">
+          {CARD_MASTERS.map((m, i) => (
+            <button
+              key={i}
+              onClick={() => handlePick(i)}
+              className="w-full text-left bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">{m.name}</span>
+                <span className="text-xs text-gray-400">{m.issuer}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {m.closingDay === 'last' ? '末日' : `${m.closingDay}日`}締め /
+                翌月{m.withdrawalDay === 'last' ? '末日' : `${m.withdrawalDay}日`}引落
+                {m.notes ? ` · ${m.notes}` : ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NewGroupForm({ onDone }: { onDone: () => void }) {
+  const addBillingGroup = useStore((s) => s.addBillingGroup)
+  const [name, setName] = useState('')
+  const [closing, setClosing] = useState('15')
+  const [withdraw, setWithdraw] = useState('10')
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+      <h3 className="text-sm font-semibold">新しい請求グループ</h3>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="グループ名"
+        className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-600">
+          締め日
+          <input
+            value={closing}
+            onChange={(e) => setClosing(e.target.value)}
+            className="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          引落日
+          <input
+            value={withdraw}
+            onChange={(e) => setWithdraw(e.target.value)}
+            className="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
+          />
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={() => {
+            if (!name.trim()) return
+            addBillingGroup({
+              name: name.trim(),
+              closingDay: inputToDaySpec(closing),
+              withdrawalDay: inputToDaySpec(withdraw),
+            })
+            onDone()
+          }}
+          className="flex-1 bg-accent text-white rounded-md py-1.5 text-xs font-semibold"
+        >
+          作成
+        </button>
+        <button
+          onClick={onDone}
+          className="flex-1 border border-gray-300 rounded-md py-1.5 text-xs"
+        >
+          キャンセル
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Cards() {
   const { billingGroups, cards } = useStore()
+  const [showMaster, setShowMaster] = useState(false)
+  const [showNewGroup, setShowNewGroup] = useState(false)
 
   return (
     <div className="px-4 pt-6 pb-4 space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">カード管理</h1>
         <p className="text-xs text-gray-500 mt-1">
-          4つの請求グループにカードを紐付けます。締め日・引落日もここで編集できます。
+          請求グループと所属カードを管理します。締め日・引落日もここで編集できます。
         </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowMaster(true)}
+          className="bg-accent text-white rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-1"
+        >
+          <Plus size={14} /> カードマスタから追加
+        </button>
+        <button
+          onClick={() => setShowNewGroup((v) => !v)}
+          className="border border-accent text-accent rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-1"
+        >
+          <Plus size={14} /> 空のグループを作成
+        </button>
+      </div>
+
+      {showNewGroup && <NewGroupForm onDone={() => setShowNewGroup(false)} />}
+
+      {billingGroups.length === 0 && !showNewGroup && (
+        <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
+          <p className="text-sm text-gray-500">
+            まだ請求グループがありません。
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            上のボタンからカードマスタを選んで追加できます。
+          </p>
+        </div>
+      )}
 
       {billingGroups.map((group) => {
         const groupCards = cards.filter((c) => c.billingGroupId === group.id)
         return (
-          <section
-            key={group.id}
-            className="bg-white rounded-2xl shadow-sm p-4"
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">{group.name}</h2>
-              <span className="text-xs text-gray-400">
-                {groupCards.length}枚
-              </span>
-            </div>
-            <GroupEditor group={group} />
+          <section key={group.id} className="bg-white rounded-2xl shadow-sm p-4">
+            <GroupHeader group={group} />
 
             <div className="mt-3 space-y-1.5">
               {groupCards.length === 0 ? (
@@ -257,6 +416,8 @@ export default function Cards() {
           </section>
         )
       })}
+
+      {showMaster && <MasterPickerModal onClose={() => setShowMaster(false)} />}
     </div>
   )
 }

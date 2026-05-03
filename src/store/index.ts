@@ -28,9 +28,13 @@ type Store = {
 
   setBillingGroups: (v: BillingGroup[]) => void
   upsertBillingGroup: (g: BillingGroup) => void
+  addBillingGroup: (g: Omit<BillingGroup, 'id'>) => string
+  deleteBillingGroup: (id: string) => void
+
+  updateTransaction: (t: Transaction) => void
 
   setCards: (v: Card[]) => void
-  addCard: (c: Omit<Card, 'id'>) => void
+  addCard: (c: Omit<Card, 'id'>) => string
   updateCard: (c: Card) => void
   deleteCard: (id: string) => void
 }
@@ -113,15 +117,40 @@ export const useStore = create<Store>((set, get) => ({
     set({ billingGroups: next })
   },
 
+  addBillingGroup: (g) => {
+    const id = uid()
+    const next = [...get().billingGroups, { ...g, id }]
+    storage.saveBillingGroups(next)
+    set({ billingGroups: next })
+    return id
+  },
+
+  deleteBillingGroup: (id) => {
+    const billingGroups = get().billingGroups.filter((g) => g.id !== id)
+    // 紐付くカードも削除
+    const cards = get().cards.filter((c) => c.billingGroupId !== id)
+    storage.saveBillingGroups(billingGroups)
+    storage.saveCards(cards)
+    set({ billingGroups, cards })
+  },
+
+  updateTransaction: (t) => {
+    const transactions = get().transactions.map((x) => (x.id === t.id ? t : x))
+    storage.saveTransactions(transactions)
+    set({ transactions })
+  },
+
   setCards: (cards) => {
     storage.saveCards(cards)
     set({ cards })
   },
 
   addCard: (c) => {
-    const cards = [...get().cards, { ...c, id: uid() }]
+    const id = uid()
+    const cards = [...get().cards, { ...c, id }]
     storage.saveCards(cards)
     set({ cards })
+    return id
   },
 
   updateCard: (c) => {

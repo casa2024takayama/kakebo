@@ -17,12 +17,11 @@ const KEYS = {
   cards: 'kakebo_cards',
 }
 
-const DEFAULT_BILLING_GROUPS: BillingGroup[] = [
-  { id: 'bg_paypay', name: 'PayPay', closingDay: 15, withdrawalDay: 10 },
-  { id: 'bg_saison', name: 'セゾン', closingDay: 15, withdrawalDay: 10 },
-  { id: 'bg_aeon', name: 'イオン', closingDay: 15, withdrawalDay: 10 },
-  { id: 'bg_jcb', name: 'JCB', closingDay: 15, withdrawalDay: 10 },
-]
+/**
+ * Phase 1.5: 新規ユーザーは空スタート。既存ユーザーの localStorage に
+ * 4グループが既に保存されていればそのまま読み出すため破壊しない。
+ */
+const DEFAULT_BILLING_GROUPS: BillingGroup[] = []
 
 const DEFAULT_CATEGORIES: Category[] = [
   { id: 'food', name: '食費', budget: 40000, color: '#1A6B4A' },

@@ -1,8 +1,12 @@
 import { useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { CreditCard, Settings as SettingsIcon } from 'lucide-react'
+import { CreditCard, Settings as SettingsIcon, AlertTriangle } from 'lucide-react'
 import { useStore } from '../store'
-import { getUpcomingWithdrawals, getMonthlyDeficit } from '../lib/forecast'
+import {
+  getUpcomingWithdrawals,
+  getMonthlyDeficit,
+  getConcentrationAlerts,
+} from '../lib/forecast'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -67,10 +71,52 @@ export default function Dashboard() {
     [transactions, billingGroups, cards, today],
   )
 
+  const concentrationAlerts = useMemo(
+    () => getConcentrationAlerts(upcoming),
+    [upcoming],
+  )
+
+  // 記録のみ（excludeFromWithdrawal=true）の件数・合計
+  const recordOnly = useMemo(() => {
+    const list = transactions.filter(
+      (t) => t.kind !== 'bulk' && t.excludeFromWithdrawal === true,
+    )
+    return {
+      count: list.length,
+      total: list.reduce((s, t) => s + t.amount, 0),
+    }
+  }, [transactions])
+
   const badge = statusBadge(deficit.status)
 
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
+      {/* 引落集中アラート */}
+      {concentrationAlerts.length > 0 && (
+        <section className="space-y-2">
+          {concentrationAlerts.map((a) => (
+            <div
+              key={a.date}
+              className="bg-warning/10 border border-warning/30 rounded-xl px-3 py-2 flex items-start gap-2"
+            >
+              <AlertTriangle
+                size={16}
+                className="text-warning flex-shrink-0 mt-0.5"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-warning">
+                  ⚠️ {formatDateLabel(a.date)} に複数着弾
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  {a.forecasts.map((f) => f.group.name).join(' / ')} 合計 ¥
+                  {fmt(a.total)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* ファーストビュー：翌月引落予定 */}
       <section>
         <p className="text-xs text-gray-500">{nextMonthLabel} の引落予定</p>
@@ -103,6 +149,11 @@ export default function Dashboard() {
             {badge.label}
           </span>
         </div>
+        {recordOnly.count > 0 && (
+          <p className="text-xs text-gray-400 mt-2">
+            📝 記録のみ {recordOnly.count}件 ¥{fmt(recordOnly.total)}（引落計算から除外）
+          </p>
+        )}
       </section>
 
       {/* 4請求グループ別の引落予定 */}
