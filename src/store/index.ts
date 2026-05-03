@@ -1,13 +1,22 @@
 import { create } from 'zustand'
 import { storage } from '../lib/storage'
 import { currentMonthKey } from '../lib/budget'
-import type { Category, Transaction, FixedCost, Settings } from '../types'
+import type {
+  Category,
+  Transaction,
+  FixedCost,
+  Settings,
+  BillingGroup,
+  Card,
+} from '../types'
 
 type Store = {
   categories: Category[]
   transactions: Transaction[]
   fixedCosts: FixedCost[]
   settings: Settings
+  billingGroups: BillingGroup[]
+  cards: Card[]
 
   setCategories: (v: Category[]) => void
   addTransaction: (t: Omit<Transaction, 'id'>) => void
@@ -16,6 +25,14 @@ type Store = {
   setFixedCosts: (v: FixedCost[]) => void
   setSettings: (v: Settings) => void
   applyFixedCostsIfNeeded: () => void
+
+  setBillingGroups: (v: BillingGroup[]) => void
+  upsertBillingGroup: (g: BillingGroup) => void
+
+  setCards: (v: Card[]) => void
+  addCard: (c: Omit<Card, 'id'>) => void
+  updateCard: (c: Card) => void
+  deleteCard: (id: string) => void
 }
 
 function uid(): string {
@@ -27,6 +44,8 @@ export const useStore = create<Store>((set, get) => ({
   transactions: storage.getTransactions(),
   fixedCosts: storage.getFixedCosts(),
   settings: storage.getSettings(),
+  billingGroups: storage.getBillingGroups(),
+  cards: storage.getCards(),
 
   setCategories: (categories) => {
     storage.saveCategories(categories)
@@ -78,5 +97,42 @@ export const useStore = create<Store>((set, get) => ({
     )
     storage.saveLastFixedApplied(monthKey)
     console.log(`固定費を${monthKey}に自動計上しました`)
+  },
+
+  setBillingGroups: (billingGroups) => {
+    storage.saveBillingGroups(billingGroups)
+    set({ billingGroups })
+  },
+
+  upsertBillingGroup: (g) => {
+    const existing = get().billingGroups
+    const next = existing.some((x) => x.id === g.id)
+      ? existing.map((x) => (x.id === g.id ? g : x))
+      : [...existing, g]
+    storage.saveBillingGroups(next)
+    set({ billingGroups: next })
+  },
+
+  setCards: (cards) => {
+    storage.saveCards(cards)
+    set({ cards })
+  },
+
+  addCard: (c) => {
+    const cards = [...get().cards, { ...c, id: uid() }]
+    storage.saveCards(cards)
+    set({ cards })
+  },
+
+  updateCard: (c) => {
+    const cards = get().cards.map((x) => (x.id === c.id ? c : x))
+    storage.saveCards(cards)
+    set({ cards })
+  },
+
+  deleteCard: (id) => {
+    const cards = get().cards.filter((c) => c.id !== id)
+    storage.saveCards(cards)
+    set({ cards })
   },
 }))

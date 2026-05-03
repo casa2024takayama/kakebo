@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, List, PlusCircle, Upload, Settings } from 'lucide-react'
+import { LayoutDashboard, List, PlusCircle, CreditCard, Settings } from 'lucide-react'
 import { useStore } from '../store'
 
 const nav = [
   { to: '/', icon: LayoutDashboard, label: 'ホーム' },
-  { to: '/transactions', icon: List, label: '明細' },
+  { to: '/cards', icon: CreditCard, label: 'カード' },
   { to: '/add', icon: PlusCircle, label: '入力' },
-  { to: '/import', icon: Upload, label: 'CSV' },
+  { to: '/transactions', icon: List, label: '明細' },
   { to: '/settings', icon: Settings, label: '設定' },
 ]
 

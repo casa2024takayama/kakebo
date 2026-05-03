@@ -6,9 +6,10 @@ import { readReceipt } from '../lib/ai'
 
 export default function AddTransaction() {
   const navigate = useNavigate()
-  const { categories, settings, addTransaction } = useStore()
+  const { categories, settings, addTransaction, cards } = useStore()
   const [amount, setAmount] = useState('')
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? 'other')
+  const [cardId, setCardId] = useState<string>('')
   const [memo, setMemo] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [scanning, setScanning] = useState(false)
@@ -19,7 +20,14 @@ export default function AddTransaction() {
     e.preventDefault()
     const n = Number(amount)
     if (!n || n <= 0) { setError('金額を入力してください'); return }
-    addTransaction({ amount: n, categoryId, memo, date, source: 'manual' })
+    addTransaction({
+      amount: n,
+      categoryId,
+      memo,
+      date,
+      source: 'manual',
+      cardId: cardId || undefined,
+    })
     navigate('/')
   }
 
@@ -104,6 +112,24 @@ export default function AddTransaction() {
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            カード <span className="text-xs text-gray-400">（任意）</span>
+          </label>
+          <select
+            value={cardId}
+            onChange={(e) => setCardId(e.target.value)}
+            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-accent outline-none"
+          >
+            <option value="">未選択（現金など）</option>
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
         </div>

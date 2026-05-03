@@ -10,6 +10,7 @@ import Import from './pages/Import'
 import Budget from './pages/Budget'
 import FixedCosts from './pages/FixedCosts'
 import AppSettings from './pages/AppSettings'
+import Cards from './pages/Cards'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -22,6 +23,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/import" element={<Import />} />
           <Route path="/budget" element={<Budget />} />
           <Route path="/fixed" element={<FixedCosts />} />
+          <Route path="/cards" element={<Cards />} />
           <Route path="/settings" element={<AppSettings />} />
         </Routes>
       </Layout>

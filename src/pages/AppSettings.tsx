@@ -9,6 +9,15 @@ export default function AppSettings() {
   const [apiKey, setApiKey] = useState(settings.anthropicApiKey)
   const [showKey, setShowKey] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [income, setIncome] = useState(String(settings.monthlyIncome ?? 0))
+  const [incomeSaved, setIncomeSaved] = useState(false)
+
+  const saveIncome = () => {
+    const n = Math.max(0, Math.floor(Number(income) || 0))
+    setSettings({ ...settings, monthlyIncome: n })
+    setIncomeSaved(true)
+    setTimeout(() => setIncomeSaved(false), 2000)
+  }
 
   const saveKey = () => {
     setSettings({ ...settings, anthropicApiKey: apiKey })
@@ -37,6 +46,32 @@ export default function AppSettings() {
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
       <h1 className="text-2xl font-bold">設定</h1>
+
+      {/* 月収 */}
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-600">月収（手取り）</h2>
+        <p className="text-xs text-gray-400">
+          翌月の引落予定との差分を計算するために使用します。
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={income}
+            onChange={(e) => setIncome(e.target.value)}
+            placeholder="例: 350000"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-accent outline-none tabular-nums"
+          />
+          <button
+            onClick={saveIncome}
+            className={`rounded-lg px-4 text-sm font-semibold transition-colors ${
+              incomeSaved ? 'bg-green-500 text-white' : 'bg-accent text-white'
+            }`}
+          >
+            {incomeSaved ? '✓' : '保存'}
+          </button>
+        </div>
+      </section>
 
       {/* APIキー */}
       <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
@@ -81,6 +116,12 @@ export default function AppSettings() {
 
       {/* 予算設定へのリンク */}
       <section className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        <button
+          onClick={() => navigate('/cards')}
+          className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium"
+        >
+          カード・請求グループ管理 <ChevronRight size={16} className="text-gray-400" />
+        </button>
         <button
           onClick={() => navigate('/budget')}
           className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium"

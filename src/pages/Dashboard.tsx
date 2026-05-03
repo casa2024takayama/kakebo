@@ -1,125 +1,160 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { CreditCard, Settings as SettingsIcon } from 'lucide-react'
 import { useStore } from '../store'
-import {
-  currentMonthKey,
-  spentByCategory,
-  totalBudget,
-  totalSpent,
-  remainingDaysInMonth,
-  todayBudget,
-} from '../lib/budget'
+import { getUpcomingWithdrawals, getMonthlyDeficit } from '../lib/forecast'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
 }
 
-function ProgressBar({ ratio, color }: { ratio: number; color: string }) {
-  const pct = Math.min(ratio * 100, 100)
-  const bg = ratio >= 1 ? '#C0392B' : ratio >= 0.8 ? '#E5972A' : color
-  return (
-    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, backgroundColor: bg }}
-      />
-    </div>
-  )
+function formatDateLabel(iso: string): string {
+  const [, m, d] = iso.split('-')
+  return `${parseInt(m, 10)}/${parseInt(d, 10)}`
+}
+
+function statusBadge(status: 'green' | 'yellow' | 'red'): {
+  label: string
+  bg: string
+  fg: string
+} {
+  switch (status) {
+    case 'green':
+      return { label: '黒字', bg: 'bg-accent/10', fg: 'text-accent' }
+    case 'yellow':
+      return { label: 'ギリギリ', bg: 'bg-warning/10', fg: 'text-warning' }
+    case 'red':
+      return { label: '赤字', bg: 'bg-danger/10', fg: 'text-danger' }
+  }
 }
 
 export default function Dashboard() {
-  const { categories, transactions, applyFixedCostsIfNeeded } = useStore()
-  const monthKey = currentMonthKey()
+  const {
+    transactions,
+    billingGroups,
+    cards,
+    settings,
+    applyFixedCostsIfNeeded,
+  } = useStore()
 
   useEffect(() => {
     applyFixedCostsIfNeeded()
   }, [applyFixedCostsIfNeeded])
 
-  const spent = spentByCategory(transactions, monthKey)
-  const budget = totalBudget(categories)
-  const total = totalSpent(transactions, monthKey)
-  const remaining = budget - total
-  const remainingDays = remainingDaysInMonth()
-  const todayLimit = todayBudget(remaining)
-  const overallRatio = budget > 0 ? total / budget : 0
+  // 翌月（カレンダー基準）
+  const today = new Date()
+  const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+  const nextMonthLabel = `${nextMonthDate.getFullYear()}年${
+    nextMonthDate.getMonth() + 1
+  }月`
 
-  const now = new Date()
-  const monthLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`
+  const monthlyIncome = settings.monthlyIncome ?? 0
+
+  const deficit = useMemo(
+    () =>
+      getMonthlyDeficit(
+        transactions,
+        billingGroups,
+        cards,
+        monthlyIncome,
+        nextMonthDate,
+      ),
+    [transactions, billingGroups, cards, monthlyIncome, nextMonthDate],
+  )
+
+  const upcoming = useMemo(
+    () => getUpcomingWithdrawals(transactions, billingGroups, cards, today),
+    [transactions, billingGroups, cards, today],
+  )
+
+  const badge = statusBadge(deficit.status)
 
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
-      {/* ヘッダー */}
-      <div>
-        <p className="text-sm text-gray-500">{monthLabel}</p>
-        <h1 className="text-2xl font-bold tracking-tight">残り予算</h1>
-      </div>
-
-      {/* メイン残高カード */}
-      <div
-        className={`rounded-2xl p-6 text-white ${
-          overallRatio >= 1
-            ? 'bg-danger'
-            : overallRatio >= 0.8
-            ? 'bg-warning'
-            : 'bg-accent'
-        }`}
-      >
-        <p className="text-sm opacity-80">今月の残り</p>
-        <p className="text-4xl font-bold mt-1 truncate">
-          ¥{fmt(Math.max(remaining, 0))}
+      {/* ファーストビュー：翌月引落予定 */}
+      <section>
+        <p className="text-xs text-gray-500">{nextMonthLabel} の引落予定</p>
+        <p className="text-4xl font-bold tracking-tight tabular-nums mt-1">
+          ¥{fmt(deficit.totalOut)}
         </p>
-        <div className="mt-4 flex justify-between text-xs opacity-80 gap-2">
-          <span>残り{remainingDays}日</span>
-          <span>今日の上限 ¥{fmt(todayLimit)}</span>
-        </div>
-        <div className="mt-3 h-2 bg-white/30 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white rounded-full transition-all duration-500"
-            style={{ width: `${Math.min(overallRatio * 100, 100)}%` }}
-          />
-        </div>
-        <div className="mt-2 flex justify-between text-xs opacity-70">
-          <span>¥{fmt(total)} 使用</span>
-          <span>¥{fmt(budget)} 予算</span>
-        </div>
-      </div>
-
-      {/* カテゴリ別 */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-          カテゴリ別
-        </h2>
-        {categories.map((cat) => {
-          const s = spent[cat.id] ?? 0
-          const ratio = cat.budget > 0 ? s / cat.budget : 0
-          return (
-            <div key={cat.id} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: cat.color }}
-                  />
-                  <span className="text-sm font-medium">{cat.name}</span>
-                  {ratio >= 1 && (
-                    <span className="text-xs bg-danger/10 text-danger px-1.5 py-0.5 rounded-full">
-                      超過
-                    </span>
-                  )}
-                  {ratio >= 0.8 && ratio < 1 && (
-                    <span className="text-xs bg-warning/10 text-warning px-1.5 py-0.5 rounded-full">
-                      注意
-                    </span>
-                  )}
-                </div>
-                <span className="text-sm text-gray-500">
-                  ¥{fmt(s)} / ¥{fmt(cat.budget)}
+        <div className="mt-3 flex items-center justify-between">
+          <div className="text-xs text-gray-500">
+            {monthlyIncome > 0 ? (
+              <>
+                収入 ¥{fmt(deficit.income)} − 引落 ¥{fmt(deficit.totalOut)} ={' '}
+                <span
+                  className={`font-semibold tabular-nums ${
+                    deficit.balance < 0 ? 'text-danger' : 'text-accent'
+                  }`}
+                >
+                  {deficit.balance < 0 ? '−' : '+'}¥
+                  {fmt(Math.abs(deficit.balance))}
                 </span>
+              </>
+            ) : (
+              <Link to="/settings" className="text-accent underline">
+                月収を設定する
+              </Link>
+            )}
+          </div>
+          <span
+            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
+          >
+            {badge.label}
+          </span>
+        </div>
+      </section>
+
+      {/* 4請求グループ別の引落予定 */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+          請求グループ別 次回引落
+        </h2>
+        {upcoming.length === 0 ? (
+          <p className="text-xs text-gray-400">
+            請求グループがありません。設定画面から追加してください。
+          </p>
+        ) : (
+          upcoming.map(({ group, cycle }) => (
+            <div
+              key={group.id}
+              className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between"
+            >
+              <div>
+                <p className="text-sm font-semibold">{group.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {formatDateLabel(cycle.cycleStart)}〜
+                  {formatDateLabel(cycle.cycleEnd)} 締め
+                </p>
+                <p className="text-xs text-gray-500">
+                  引落 {formatDateLabel(cycle.withdrawalDate)}
+                </p>
               </div>
-              <ProgressBar ratio={ratio} color={cat.color} />
+              <p className="text-lg font-bold tabular-nums">
+                ¥{fmt(cycle.total)}
+              </p>
             </div>
-          )
-        })}
-      </div>
+          ))
+        )}
+      </section>
+
+      {/* クイックリンク */}
+      <section className="grid grid-cols-2 gap-2">
+        <Link
+          to="/cards"
+          className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 text-sm"
+        >
+          <CreditCard size={16} className="text-accent" />
+          カード管理
+        </Link>
+        <Link
+          to="/settings"
+          className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 text-sm"
+        >
+          <SettingsIcon size={16} className="text-accent" />
+          月収・設定
+        </Link>
+      </section>
     </div>
   )
 }

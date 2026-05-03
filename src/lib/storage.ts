@@ -1,4 +1,11 @@
-import type { Category, Transaction, FixedCost, Settings } from '../types'
+import type {
+  Category,
+  Transaction,
+  FixedCost,
+  Settings,
+  BillingGroup,
+  Card,
+} from '../types'
 
 const KEYS = {
   categories: 'kakebo_categories',
@@ -6,7 +13,16 @@ const KEYS = {
   fixedCosts: 'kakebo_fixed_costs',
   settings: 'kakebo_settings',
   lastFixedApplied: 'kakebo_last_fixed_applied',
+  billingGroups: 'kakebo_billing_groups',
+  cards: 'kakebo_cards',
 }
+
+const DEFAULT_BILLING_GROUPS: BillingGroup[] = [
+  { id: 'bg_paypay', name: 'PayPay', closingDay: 15, withdrawalDay: 10 },
+  { id: 'bg_saison', name: 'セゾン', closingDay: 15, withdrawalDay: 10 },
+  { id: 'bg_aeon', name: 'イオン', closingDay: 15, withdrawalDay: 10 },
+  { id: 'bg_jcb', name: 'JCB', closingDay: 15, withdrawalDay: 10 },
+]
 
 const DEFAULT_CATEGORIES: Category[] = [
   { id: 'food', name: '食費', budget: 40000, color: '#1A6B4A' },
@@ -41,9 +57,20 @@ export const storage = {
   saveFixedCosts: (v: FixedCost[]) => save(KEYS.fixedCosts, v),
 
   getSettings: () =>
-    load<Settings>(KEYS.settings, { anthropicApiKey: '', darkMode: false }),
+    load<Settings>(KEYS.settings, {
+      anthropicApiKey: '',
+      darkMode: false,
+      monthlyIncome: 0,
+    }),
   saveSettings: (v: Settings) => save(KEYS.settings, v),
 
   getLastFixedApplied: () => load<string>(KEYS.lastFixedApplied, ''),
   saveLastFixedApplied: (v: string) => save(KEYS.lastFixedApplied, v),
+
+  getBillingGroups: () =>
+    load<BillingGroup[]>(KEYS.billingGroups, DEFAULT_BILLING_GROUPS),
+  saveBillingGroups: (v: BillingGroup[]) => save(KEYS.billingGroups, v),
+
+  getCards: () => load<Card[]>(KEYS.cards, []),
+  saveCards: (v: Card[]) => save(KEYS.cards, v),
 }
