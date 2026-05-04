@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Plus, Trash2, Pencil, Check, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Trash2, Pencil, Check, X, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import type { BillingGroup, Card, DaySpec } from '../types'
 import { CARD_MASTERS } from '../lib/cardMasters'
@@ -355,6 +356,7 @@ function NewGroupForm({ onDone }: { onDone: () => void }) {
 }
 
 export default function Cards() {
+  const navigate = useNavigate()
   const { billingGroups, cards } = useStore()
   const [showMaster, setShowMaster] = useState(false)
   const [showNewGroup, setShowNewGroup] = useState(false)
@@ -367,6 +369,13 @@ export default function Cards() {
           請求グループと所属カードを管理します。締め日・引落日もここで編集できます。
         </p>
       </div>
+
+      <button
+        onClick={() => navigate('/import')}
+        className="w-full bg-amber-50 border border-amber-300 text-amber-800 rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-amber-100"
+      >
+        <Upload size={16} /> 明細をCSVから取り込む
+      </button>
 
       <div className="grid grid-cols-2 gap-2">
         <button

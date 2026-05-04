@@ -20,8 +20,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     else root.classList.remove('dark')
   }, [darkMode])
 
+  const buildDate = new Date(__BUILD_TIME__).toLocaleString('ja-JP', {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
   return (
     <div className="min-h-screen bg-bg text-text dark:bg-gray-900 dark:text-gray-100 flex flex-col max-w-md mx-auto">
+      <div className="fixed top-1 right-2 z-50 text-[10px] text-gray-400 dark:text-gray-500 bg-white/70 dark:bg-gray-900/70 px-1.5 py-0.5 rounded pointer-events-none">
+        v{__APP_VERSION__} · {buildDate}
+      </div>
       <main className="flex-1 overflow-y-auto pb-20">{children}</main>
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-around py-2 z-50">
         {nav.map(({ to, icon: Icon, label }) => (

@@ -123,6 +123,12 @@ export default function AppSettings() {
           カード・請求グループ管理 <ChevronRight size={16} className="text-gray-400" />
         </button>
         <button
+          onClick={() => navigate('/import')}
+          className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium"
+        >
+          CSVインポート <ChevronRight size={16} className="text-gray-400" />
+        </button>
+        <button
           onClick={() => navigate('/budget')}
           className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium"
         >
