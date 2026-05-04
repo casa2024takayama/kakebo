@@ -7,7 +7,7 @@ import { storage, type ImportLogEntry } from '../lib/storage'
 import type { Transaction } from '../types'
 
 type Preview = Omit<Transaction, 'id'>
-type Preset = 'generic' | 'saison'
+type Preset = 'generic' | 'saison' | 'aeon'
 
 export default function Import() {
   const {
@@ -49,7 +49,7 @@ export default function Import() {
     setSaisonResult(null)
     setFileName(file.name)
     try {
-      if (preset === 'saison') {
+      if (preset === 'saison' || preset === 'aeon') {
         const r = await parseSaisonCsv(file, rules)
         setSaisonResult(r)
         // カード自動マッチング
@@ -78,7 +78,7 @@ export default function Import() {
     const skippedCount = previews.length - toImport.length
     let bulkCreated = false
 
-    if (preset === 'saison' && saisonResult) {
+    if ((preset === 'saison' || preset === 'aeon') && saisonResult) {
       const cardId = matchedCardId || undefined
       const stamped: Preview[] = toImport.map((t) => ({ ...t, cardId }))
       addTransactions(stamped)
@@ -141,7 +141,7 @@ export default function Import() {
           addTransaction({
             amount: saisonResult.totalBilled,
             categoryId: categories[0]?.id ?? 'other',
-            memo: `セゾン請求一括（${billingMonth}）`,
+            memo: `${card.name}請求一括（${billingMonth}）`,
             date: targetWd,
             // v0.4.5: 実引落日を明示。これがないと computeDerivedDates が
             // billingMonth から理論計算してしまい、bulkの引落日が誤った日(例:7/6)になる。
@@ -169,7 +169,7 @@ export default function Import() {
       bulkCreated,
       totalBilled: bulkCreated ? saisonResult?.totalBilled : undefined,
       note:
-        preset === 'saison' && previews.length === 0 && !bulkCreated
+        (preset === 'saison' || preset === 'aeon') && previews.length === 0 && !bulkCreated
           ? '明細0件・一括レコードも作成しなかったため何も保存されませんでした'
           : undefined,
     })
@@ -187,7 +187,7 @@ export default function Import() {
 
   // info メッセージは状態ではなく算出値（カード未マッチ時に動的表示）
   const info =
-    preset === 'saison' && saisonResult && !matchedCardId
+    (preset === 'saison' || preset === 'aeon') && saisonResult && !matchedCardId
       ? `カード「${saisonResult.cardName || '(空)'}」が見つかりません。カード管理画面から登録するか、下のドロップダウンで割り当ててください。`
       : ''
 
@@ -206,7 +206,8 @@ export default function Import() {
           className="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white text-sm"
         >
           <option value="generic">汎用（金額・日付列を自動検出）</option>
-          <option value="saison">セゾン（1行目カード名／2行目支払日／3行目合計）</option>
+          <option value="saison">セゾン（明細CSV）</option>
+          <option value="aeon">イオン（明細CSV）</option>
         </select>
       </div>
 
@@ -395,7 +396,7 @@ export default function Import() {
                       </span>
                     </div>
                     <div className="text-gray-500 mt-1">
-                      {log.preset === 'saison' ? 'セゾン' : '汎用'}
+                      {log.preset === 'saison' ? 'セゾン' : log.preset === 'aeon' ? 'イオン' : '汎用'}
                       {log.cardName ? ` · ${log.cardName}` : ''}
                       {' · '}明細{log.detailsCount}件
                       {log.skippedCount > 0 ? ` (${log.skippedCount}件除外)` : ''}
@@ -427,7 +428,7 @@ export default function Import() {
 
       {/* sticky な実行バー: 明細あり OR セゾン一括作成可能（previews=0でも合計>0 + カード割当ありなら表示） */}
       {(previews.length > 0 ||
-        (preset === 'saison' &&
+        ((preset === 'saison' || preset === 'aeon') &&
           saisonResult &&
           createBulkRecord &&
           matchedCardId &&

@@ -128,12 +128,12 @@ export type SaisonParseResult = {
 function extractSaisonCardName(rows: string[][]): string {
   // 明細ヘッダ前まで（最大10行）を探索範囲に
   const limit = Math.min(rows.length, 10)
-  // (1) ラベル行
+  // (1) ラベル行（カード名称 / カード名 / ご利用カード等）
   for (let i = 0; i < limit; i++) {
     const row = rows[i] ?? []
     for (let j = 0; j < row.length; j++) {
       const cell = (row[j] ?? '').trim()
-      if (/^カード(名称|名)?$/.test(cell)) {
+      if (/^(ご利用カード|カード名称|カード名|カード)$/.test(cell)) {
         const right = (row[j + 1] ?? '').trim()
         if (right) return right
       }
@@ -155,7 +155,7 @@ function extractSaisonCardName(rows: string[][]): string {
  * セゾンCSVヘッダ部から、ラベル正規表現にマッチするセルの右セルの値を返す。
  */
 function extractSaisonByLabel(rows: string[][], labelRe: RegExp): string | null {
-  const limit = Math.min(rows.length, 10)
+  const limit = Math.min(rows.length, 15)
   for (let i = 0; i < limit; i++) {
     const row = rows[i] ?? []
     for (let j = 0; j < row.length; j++) {
@@ -170,7 +170,23 @@ function extractSaisonByLabel(rows: string[][], labelRe: RegExp): string | null 
 }
 
 function parseDateLoose(raw: string): string | null {
-  const cleaned = raw.replace(/[年月.]/g, '/').replace(/日/g, '').trim()
+  const trimmed = raw.trim()
+  // v0.4.7: YYMMDD 6桁圧縮形式（イオンCSV「260311」など）
+  if (/^\d{6}$/.test(trimmed)) {
+    const yy = trimmed.slice(0, 2)
+    const mm = trimmed.slice(2, 4)
+    const dd = trimmed.slice(4, 6)
+    const m = parseInt(mm, 10)
+    const d = parseInt(dd, 10)
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `20${yy}-${mm}-${dd}`
+    }
+  }
+  // 年/月/日表記。スペース除去（「2026年 5月 7日」→「2026/5/7」対応）
+  const cleaned = trimmed
+    .replace(/[年月.]/g, '/')
+    .replace(/日/g, '')
+    .replace(/\s+/g, '')
   if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(cleaned)) {
     const [y, m, d] = cleaned.split('/')
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
