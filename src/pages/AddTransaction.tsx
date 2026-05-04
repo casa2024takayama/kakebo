@@ -97,11 +97,14 @@ export default function AddTransaction() {
         amount: n,
         categoryId: categories[0]?.id ?? 'other',
         memo: `請求一括（${bulkBillingMonth}）`,
-        date: cyc.withdrawalDate,
+        // 利用日は保存しない代わりに、請求期間の末日（締め日）を date に入れる。
+        // Transaction.date は「利用日」フィールドだが、請求一括の場合は
+        // 「期間を代表する日 = 締め日」として扱い、引落日では絶対に上書きしない。
+        date: cyc.cycleEnd,
         source: 'manual',
         cardId: bulkCardId,
         kind: 'bulk',
-        billingMonth: bulkBillingMonth,
+        billingPeriod: { start: cyc.cycleStart, end: cyc.cycleEnd },
       })
       navigate('/')
     }

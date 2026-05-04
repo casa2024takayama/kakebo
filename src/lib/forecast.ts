@@ -46,12 +46,12 @@ export function getUpcomingWithdrawals(
     if (!groupId) continue
     const group = groups.find((g) => g.id === groupId)
     if (!group) continue
-    // 請求一括は billingMonth から該当月の引落サイクルを推定する
+    // 請求一括は billingPeriod / billingMonth から該当月の引落サイクルを推定する
     let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
-    if (t.kind === 'bulk' && t.billingMonth) {
-      // billingMonth の中央あたりの日付で近似（締め期間の中身を引っ張ればよい）
-      const approxDate = `${t.billingMonth}-15`
-      cyc = getCycleForTransaction(approxDate, group)
+    if (t.kind === 'bulk' && t.billingPeriod) {
+      cyc = getCycleForTransaction(t.billingPeriod.end, group)
+    } else if (t.kind === 'bulk' && t.billingMonth) {
+      cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
     } else {
       cyc = getCycleForTransaction(t.date, group)
     }
@@ -148,7 +148,9 @@ export function getMonthlyDeficit(
     const group = groups.find((g) => g.id === groupId)
     if (!group) continue
     let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
-    if (t.kind === 'bulk' && t.billingMonth) {
+    if (t.kind === 'bulk' && t.billingPeriod) {
+      cyc = getCycleForTransaction(t.billingPeriod.end, group)
+    } else if (t.kind === 'bulk' && t.billingMonth) {
       cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
     } else {
       cyc = getCycleForTransaction(t.date, group)

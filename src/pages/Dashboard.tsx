@@ -7,6 +7,7 @@ import {
   getMonthlyDeficit,
   getConcentrationAlerts,
 } from '../lib/forecast'
+import { getCurrentAndNextCycles } from '../lib/payCycle'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -89,8 +90,81 @@ export default function Dashboard() {
 
   const badge = statusBadge(deficit.status)
 
+  // Sprint1: 現サイクルのカード利用累計
+  const payDay =
+    typeof settings.payDay === 'number' || settings.payDay === 'last'
+      ? settings.payDay
+      : 15
+  const shiftRule = settings.payDayShiftRule ?? 'before'
+  const payCycles = useMemo(
+    () => getCurrentAndNextCycles(payDay, shiftRule, today),
+    [payDay, shiftRule, today],
+  )
+  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(today.getDate()).padStart(2, '0')}`
+
+  const currentCycleUsage = useMemo(() => {
+    let total = 0
+    for (const t of transactions) {
+      if (!t.cardId) continue
+      if (t.kind === 'bulk') continue // 利用日基準なので一括は除外
+      if (t.excludeFromWithdrawal) continue
+      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+        total += t.amount
+      }
+    }
+    return total
+  }, [transactions, payCycles])
+
+  const cycleLengthDays = (() => {
+    const [sy, sm, sd] = payCycles.current.start.split('-').map(Number)
+    const [ey, em, ed] = payCycles.current.end.split('-').map(Number)
+    return (
+      Math.round(
+        (new Date(ey, em - 1, ed).getTime() -
+          new Date(sy, sm - 1, sd).getTime()) /
+          86400000,
+      ) + 1
+    )
+  })()
+  const remainingDays = (() => {
+    const [ey, em, ed] = payCycles.current.end.split('-').map(Number)
+    const [ty, tm, td] = todayISO.split('-').map(Number)
+    return Math.max(
+      0,
+      Math.round(
+        (new Date(ey, em - 1, ed).getTime() -
+          new Date(ty, tm - 1, td).getTime()) /
+          86400000,
+      ) + 1,
+    )
+  })()
+  const dailyAvg =
+    cycleLengthDays > 0 ? Math.round(currentCycleUsage / cycleLengthDays) : 0
+
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
+      {/* Sprint1: 現サイクルのカード利用累計 */}
+      <section className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
+        <p className="text-xs text-accent font-semibold">
+          現サイクル（{payCycles.current.start.slice(5).replace('-', '/')}〜
+          {payCycles.current.end.slice(5).replace('-', '/')}）で使用
+        </p>
+        <p className="text-3xl font-bold tracking-tight tabular-nums mt-1">
+          ¥{fmt(currentCycleUsage)}
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+          <div>
+            残り <span className="font-semibold tabular-nums">{remainingDays}</span> 日
+          </div>
+          <div>
+            日割平均 <span className="font-semibold tabular-nums">¥{fmt(dailyAvg)}</span>/日
+          </div>
+        </div>
+      </section>
+
       {/* 引落集中アラート */}
       {concentrationAlerts.length > 0 && (
         <section className="space-y-2">

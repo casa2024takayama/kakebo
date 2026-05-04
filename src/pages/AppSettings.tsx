@@ -11,12 +11,29 @@ export default function AppSettings() {
   const [saved, setSaved] = useState(false)
   const [income, setIncome] = useState(String(settings.monthlyIncome ?? 0))
   const [incomeSaved, setIncomeSaved] = useState(false)
+  const [payDay, setPayDay] = useState<string>(
+    settings.payDay === 'last' ? 'last' : String(settings.payDay ?? 15),
+  )
+  const [shiftRule, setShiftRule] = useState<'before' | 'after' | 'none'>(
+    settings.payDayShiftRule ?? 'before',
+  )
+  const [paySaved, setPaySaved] = useState(false)
 
   const saveIncome = () => {
     const n = Math.max(0, Math.floor(Number(income) || 0))
     setSettings({ ...settings, monthlyIncome: n })
     setIncomeSaved(true)
     setTimeout(() => setIncomeSaved(false), 2000)
+  }
+
+  const savePayDay = () => {
+    const pd: number | 'last' =
+      payDay === 'last'
+        ? 'last'
+        : Math.min(31, Math.max(1, Math.floor(Number(payDay) || 15)))
+    setSettings({ ...settings, payDay: pd, payDayShiftRule: shiftRule })
+    setPaySaved(true)
+    setTimeout(() => setPaySaved(false), 2000)
   }
 
   const saveKey = () => {
@@ -69,6 +86,43 @@ export default function AppSettings() {
             }`}
           >
             {incomeSaved ? '✓' : '保存'}
+          </button>
+        </div>
+      </section>
+
+      {/* 給料日 */}
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-600">給料日</h2>
+        <p className="text-xs text-gray-400">
+          家計サイクルの起点に使用します。休業日は指定ルールでシフト。
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={payDay}
+            onChange={(e) => setPayDay(e.target.value)}
+            placeholder="15 または last"
+            className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-accent outline-none tabular-nums"
+          />
+          <select
+            value={shiftRule}
+            onChange={(e) =>
+              setShiftRule(e.target.value as 'before' | 'after' | 'none')
+            }
+            className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-sm bg-white"
+          >
+            <option value="before">前営業日繰上</option>
+            <option value="after">翌営業日繰下</option>
+            <option value="none">シフトしない</option>
+          </select>
+          <button
+            onClick={savePayDay}
+            className={`rounded-lg px-4 text-sm font-semibold transition-colors ${
+              paySaved ? 'bg-green-500 text-white' : 'bg-accent text-white'
+            }`}
+          >
+            {paySaved ? '✓' : '保存'}
           </button>
         </div>
       </section>

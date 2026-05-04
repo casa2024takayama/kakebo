@@ -5,18 +5,38 @@ export type Category = {
   color: string
 }
 
+/** 日付範囲 (YYYY-MM-DD JST, inclusive) */
+export type DateRange = {
+  start: string
+  end: string
+}
+
 export type Transaction = {
   id: string
   amount: number
   categoryId: string
   memo: string
+  /**
+   * 利用日（YYYY-MM-DD, JST）。
+   * IMPORTANT: これは「利用日」固定であり、引落日や請求日に書き換えてはならない。
+   * 引落日は派生データなので Transaction には保存せず、表示時に都度計算する。
+   */
   date: string
   source: 'manual' | 'csv' | 'receipt'
   /** Phase 1: 任意フィールド。未指定は現金/カード未割当扱い */
   cardId?: string
   /** Phase 1.5: 個別取引 or 請求一括（未指定は個別とみなす） */
   kind?: 'individual' | 'bulk'
-  /** Phase 1.5: 請求一括の請求月（'YYYY-MM'） */
+  /**
+   * Sprint1: 請求一括の請求期間（締め期間）。
+   * 例: { start: '2026-04-15', end: '2026-05-14' }
+   */
+  billingPeriod?: DateRange
+  /**
+   * @deprecated Sprint1 で billingPeriod に置き換え。
+   * 既存データ互換のために残してあるが、新規書き込みには使わない。
+   * ('YYYY-MM' 形式)
+   */
   billingMonth?: string
   /** Phase 1.5: 引落計算から除外（記録のみ）。請求一括との重複制御に使用 */
   excludeFromWithdrawal?: boolean
@@ -30,11 +50,22 @@ export type FixedCost = {
   day: number
 }
 
+export type PayDayShiftRule = 'before' | 'after' | 'none'
+
 export type Settings = {
   anthropicApiKey: string
   darkMode: boolean
   /** Phase 1: 月収（手取り、円、整数）。未設定は0 */
   monthlyIncome?: number
+  /** Sprint1: 給料日（1〜31 or 'last'）。既定 15 */
+  payDay?: number | 'last'
+  /**
+   * Sprint1: 給料日が休業日のときのシフトルール。
+   * - 'before': 前営業日繰上（既定）
+   * - 'after' : 翌営業日繰下
+   * - 'none'  : シフトしない
+   */
+  payDayShiftRule?: PayDayShiftRule
 }
 
 export type MonthKey = string // "2026-04"

@@ -15,12 +15,12 @@ const KEYS = {
   lastFixedApplied: 'kakebo_last_fixed_applied',
   billingGroups: 'kakebo_billing_groups',
   cards: 'kakebo_cards',
+  /** Sprint1: マイグレーション完了フラグ */
+  migrationV03: 'kakebo_migration_v0_3',
+  /** Sprint1: 利用日/引落日混在の警告を1度だけ出すためのフラグ */
+  warnedMixedDates: 'kakebo_warned_mixed_dates',
 }
 
-/**
- * Phase 1.5: 新規ユーザーは空スタート。既存ユーザーの localStorage に
- * 4グループが既に保存されていればそのまま読み出すため破壊しない。
- */
 const DEFAULT_BILLING_GROUPS: BillingGroup[] = []
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -45,6 +45,48 @@ function save<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+function lastDayOfMonth(y: number, m0: number): number {
+  return new Date(y, m0 + 1, 0).getDate()
+}
+
+/**
+ * Sprint1 マイグレーション:
+ * - billingMonth (YYYY-MM) を billingPeriod ({ start, end }) に変換
+ * - 既存データに billingPeriod が無く billingMonth がある場合のみ補完
+ * - 1度だけ実行（フラグ管理）
+ *
+ * Returns: { migrated: number, hasBulkRecords: boolean }
+ */
+export function runMigrationV03(): { migrated: number; hasBulkRecords: boolean } {
+  const done = load<string>(KEYS.migrationV03, '')
+  if (done === '1') {
+    const txs = load<Transaction[]>(KEYS.transactions, [])
+    const hasBulkRecords = txs.some((t) => t.kind === 'bulk')
+    return { migrated: 0, hasBulkRecords }
+  }
+  const txs = load<Transaction[]>(KEYS.transactions, [])
+  let migrated = 0
+  const next = txs.map((t) => {
+    if (!t.billingPeriod && t.billingMonth && /^\d{4}-\d{2}$/.test(t.billingMonth)) {
+      const [y, m] = t.billingMonth.split('-').map(Number)
+      const last = lastDayOfMonth(y, m - 1)
+      migrated += 1
+      return {
+        ...t,
+        billingPeriod: {
+          start: `${t.billingMonth}-01`,
+          end: `${t.billingMonth}-${String(last).padStart(2, '0')}`,
+        },
+      }
+    }
+    return t
+  })
+  if (migrated > 0) save(KEYS.transactions, next)
+  save(KEYS.migrationV03, '1')
+  const hasBulkRecords = next.some((t) => t.kind === 'bulk')
+  return { migrated, hasBulkRecords }
+}
+
 export const storage = {
   getCategories: () => load<Category[]>(KEYS.categories, DEFAULT_CATEGORIES),
   saveCategories: (v: Category[]) => save(KEYS.categories, v),
@@ -60,6 +102,8 @@ export const storage = {
       anthropicApiKey: '',
       darkMode: false,
       monthlyIncome: 0,
+      payDay: 15,
+      payDayShiftRule: 'before',
     }),
   saveSettings: (v: Settings) => save(KEYS.settings, v),
 
@@ -72,4 +116,7 @@ export const storage = {
 
   getCards: () => load<Card[]>(KEYS.cards, []),
   saveCards: (v: Card[]) => save(KEYS.cards, v),
+
+  getWarnedMixedDates: () => load<string>(KEYS.warnedMixedDates, ''),
+  saveWarnedMixedDates: (v: string) => save(KEYS.warnedMixedDates, v),
 }

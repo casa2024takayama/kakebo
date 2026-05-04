@@ -1,6 +1,15 @@
 import { create } from 'zustand'
-import { storage } from '../lib/storage'
+import { storage, runMigrationV03 } from '../lib/storage'
 import { currentMonthKey } from '../lib/budget'
+
+// Sprint1: 起動時マイグレーション（idempotent）
+const migrationResult = runMigrationV03()
+if (migrationResult.hasBulkRecords && !storage.getWarnedMixedDates()) {
+  // bulk レコードがあるユーザーは date が引落日に上書きされている可能性がある。
+  // ブラウザで簡易トースト相当のログ＋setTimeout で alert は鬱陶しいので、
+  // 1 度だけ console と一時バナー（main から拾う）をトリガーする目的でフラグだけ立てる。
+  // UI 側で表示するため warned フラグはまだ立てない（Layout 等で表示後に立てる）
+}
 import type {
   Category,
   Transaction,
