@@ -23,7 +23,6 @@ export default function Import() {
   const [previews, setPreviews] = useState<Preview[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
   const [done, setDone] = useState(false)
 
   // セゾンプリセットの結果保持
@@ -37,7 +36,6 @@ export default function Import() {
     const file = e.target.files?.[0]
     if (!file) return
     setError('')
-    setInfo('')
     setDone(false)
     setPreviews([])
     setSaisonResult(null)
@@ -50,11 +48,6 @@ export default function Import() {
         setMatchedCardId(m?.id ?? '')
         setPreviews(r.details)
         setSelected(new Set(r.details.map((_, i) => i)))
-        if (!m) {
-          setInfo(
-            `カード「${r.cardName}」が見つかりません。カード管理画面から登録してください。`,
-          )
-        }
       } else {
         const rows = await parseCsv(file, rules)
         setPreviews(rows)
@@ -163,8 +156,14 @@ export default function Import() {
     setPreviews((p) => p.map((row, idx) => (idx === i ? { ...row, categoryId } : row)))
   }
 
+  // info メッセージは状態ではなく算出値（カード未マッチ時に動的表示）
+  const info =
+    preset === 'saison' && saisonResult && !matchedCardId
+      ? `カード「${saisonResult.cardName || '(空)'}」が見つかりません。カード管理画面から登録するか、下のドロップダウンで割り当ててください。`
+      : ''
+
   return (
-    <div className="px-4 pt-6 pb-4">
+    <div className="px-4 pt-6 pb-32">
       <h1 className="text-2xl font-bold mb-2">CSVインポート</h1>
       <p className="text-sm text-gray-400 mb-4">
         クレカ・銀行の明細CSVをアップロードします（Shift_JIS自動判定対応）
@@ -320,14 +319,20 @@ export default function Import() {
             ))}
           </div>
 
+        </>
+      )}
+
+      {/* sticky な実行バー: 明細リストの長さに関係なく常時画面下部に表示 */}
+      {previews.length > 0 && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md lg:max-w-6xl px-4 pointer-events-none z-40">
           <button
             onClick={handleImport}
             disabled={selected.size === 0}
-            className="w-full bg-accent text-white rounded-xl py-3.5 font-semibold disabled:opacity-40"
+            className="pointer-events-auto w-full bg-accent text-white rounded-xl py-3.5 font-semibold disabled:opacity-40 shadow-lg"
           >
             {selected.size}件をインポート
           </button>
-        </>
+        </div>
       )}
     </div>
   )
