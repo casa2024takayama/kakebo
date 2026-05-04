@@ -271,6 +271,26 @@ export default function AppSettings() {
         </label>
       </section>
 
+      {/* テストモード（v0.4.4） */}
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <AlertCircle size={16} className="text-danger" /> テストモード
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.testMode ?? false}
+            onChange={(e) => setSettings({ ...settings, testMode: e.target.checked })}
+            className="w-5 h-5 accent-danger"
+          />
+        </label>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          ON時、ページロード毎に <strong>取引と固定費を自動削除</strong> します。
+          カード・グループ・カテゴリ・設定は保持されます。
+          バックアップから復元すれば実データに戻せます。
+        </p>
+      </section>
+
       {/* 予算設定へのリンク */}
       <section className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
         <button

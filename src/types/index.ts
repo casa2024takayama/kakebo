@@ -72,6 +72,12 @@ export type Settings = {
    * - 'none'  : シフトしない
    */
   payDayShiftRule?: PayDayShiftRule
+  /**
+   * v0.4.4: テストモード。
+   * ON時、ページロード毎に取引・固定費を自動削除する（クリーン状態でテスト用）。
+   * 既定 false。個人利用前提のため設定UIに表面化している。
+   */
+  testMode?: boolean
 }
 
 export type MonthKey = string // "2026-04"

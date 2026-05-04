@@ -74,11 +74,18 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+// v0.4.4: テストモードならページロード時に取引・固定費をクリア
+const _initialSettings = storage.getSettings()
+if (_initialSettings.testMode) {
+  storage.saveTransactions([])
+  storage.saveFixedCosts([])
+}
+
 export const useStore = create<Store>((set, get) => ({
   categories: storage.getCategories(),
   transactions: storage.getTransactions(),
   fixedCosts: storage.getFixedCosts(),
-  settings: storage.getSettings(),
+  settings: _initialSettings,
   billingGroups: storage.getBillingGroups(),
   cards: storage.getCards(),
 

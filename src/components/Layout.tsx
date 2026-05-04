@@ -45,6 +45,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setShowMixWarn(false)
   }
 
+  const testMode = useStore((s) => s.settings.testMode)
+
   const buildDate = new Date(__BUILD_TIME__).toLocaleString('ja-JP', {
     year: '2-digit',
     month: '2-digit',
@@ -58,6 +60,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="fixed top-1 right-2 z-50 text-[10px] text-gray-400 dark:text-gray-500 bg-white/70 dark:bg-gray-900/70 px-1.5 py-0.5 rounded pointer-events-none">
         v{__APP_VERSION__} · {buildDate}
       </div>
+      {testMode && (
+        <div className="sticky top-0 z-40 bg-danger text-white px-3 py-1.5 text-center text-xs font-semibold tracking-wide">
+          ⚠ テストモード ON：リロード毎に取引・固定費を自動削除します
+        </div>
+      )}
       {showMixWarn && (
         <div className="sticky top-0 z-40 bg-amber-50 border-b border-amber-200 px-3 py-2 flex items-start gap-2 text-xs text-amber-800">
           <span className="flex-1">
