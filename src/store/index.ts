@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { storage, runMigrationV03 } from '../lib/storage'
+import { storage, runMigrationV03, runMigrationV048 } from '../lib/storage'
 import type { TimelineFilter } from '../lib/storage'
 import { currentMonthKey } from '../lib/budget'
 
@@ -17,6 +17,12 @@ if (migrationResult.hasBulkRecords && !storage.getWarnedMixedDates()) {
   // ブラウザで簡易トースト相当のログ＋setTimeout で alert は鬱陶しいので、
   // 1 度だけ console と一時バナー（main から拾う）をトリガーする目的でフラグだけ立てる。
   // UI 側で表示するため warned フラグはまだ立てない（Layout 等で表示後に立てる）
+}
+
+// v0.4.8: bulkに actualWithdrawalDate を補完するマイグレーション
+const fixedBulks = runMigrationV048()
+if (fixedBulks > 0) {
+  console.log(`[v0.4.8 migration] ${fixedBulks} bulk record(s) repaired with actualWithdrawalDate`)
 }
 import type {
   Category,

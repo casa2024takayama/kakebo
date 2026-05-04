@@ -23,6 +23,8 @@ const KEYS = {
   timelineFilter: 'kakebo_timeline_filter',
   /** v0.4.2: CSVインポート履歴ログ */
   importLog: 'kakebo_import_log',
+  /** v0.4.8: bulkレコードに actualWithdrawalDate 補完 */
+  migrationV048: 'kakebo_migration_v0_4_8',
 }
 
 export type ImportLogEntry = {
@@ -116,6 +118,34 @@ export function runMigrationV03(): { migrated: number; hasBulkRecords: boolean }
   save(KEYS.migrationV03, '1')
   const hasBulkRecords = next.some((t) => t.kind === 'bulk')
   return { migrated, hasBulkRecords }
+}
+
+/**
+ * v0.4.8 マイグレーション:
+ * v0.4.5以前に作成された bulk レコードは actualWithdrawalDate を持たないため、
+ * computeDerivedDates が billingMonth から理論計算してしまい、
+ * 引落日と請求期間が誤った値（次サイクル）になる。
+ *
+ * このマイグレーションは、そうした「壊れたbulk」を検出し、
+ * date フィールド（保存時に引落日を入れている）を actualWithdrawalDate にコピーして補修する。
+ *
+ * Returns: 修復されたレコード数
+ */
+export function runMigrationV048(): number {
+  const done = load<string>(KEYS.migrationV048, '')
+  if (done === '1') return 0
+  const txs = load<Transaction[]>(KEYS.transactions, [])
+  let fixed = 0
+  const next = txs.map((t) => {
+    if (t.kind === 'bulk' && !t.actualWithdrawalDate && t.date) {
+      fixed += 1
+      return { ...t, actualWithdrawalDate: t.date }
+    }
+    return t
+  })
+  if (fixed > 0) save(KEYS.transactions, next)
+  save(KEYS.migrationV048, '1')
+  return fixed
 }
 
 export const storage = {

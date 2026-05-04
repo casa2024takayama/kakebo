@@ -182,6 +182,69 @@ export function getMonthlyDeficit(
 }
 
 /**
+ * v0.4.8: 任意の日付範囲（startISO〜endISO, 両端含む）に引落がある合計と差額。
+ * Dashboard で「今月の残り」「翌月」を別々に算出するために使用。
+ *
+ * - signalThreshold = false: 信号色は green/yellow のみ（情報表示用）
+ * - signalThreshold = true: 通常の判定（収入比較）
+ */
+export function getDeficitForRange(
+  transactions: Transaction[],
+  groups: BillingGroup[],
+  cards: Card[],
+  monthlyIncome: number,
+  startISO: string,
+  endISO: string,
+  options: { evaluateSignal?: boolean } = { evaluateSignal: true },
+): MonthlyDeficit {
+  const c2g = cardToGroup(cards)
+  const inRange = (iso: string) => iso >= startISO && iso <= endISO
+
+  let totalOut = 0
+  for (const t of transactions) {
+    if (!isForecastTarget(t)) continue
+    if (!t.cardId) {
+      if (inRange(t.date)) totalOut += t.amount
+      continue
+    }
+    const groupId = c2g.get(t.cardId)
+    if (!groupId) {
+      if (inRange(t.date)) totalOut += t.amount
+      continue
+    }
+    const group = groups.find((g) => g.id === groupId)
+    if (!group) continue
+    let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
+    if (t.kind === 'bulk' && t.billingPeriod) {
+      cyc = getCycleForTransaction(t.billingPeriod.end, group)
+    } else if (t.kind === 'bulk' && t.billingMonth) {
+      cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
+    } else {
+      cyc = getCycleForTransaction(t.date, group)
+    }
+    const wd = t.actualWithdrawalDate ?? cyc.withdrawalDate
+    if (inRange(wd)) totalOut += t.amount
+  }
+
+  const income = Math.max(0, Math.floor(monthlyIncome || 0))
+  const balance = income - totalOut
+  let status: 'green' | 'yellow' | 'red' = 'green'
+  if (options.evaluateSignal !== false) {
+    if (income > 0) {
+      const ratio = totalOut / income
+      if (balance < 0) status = 'red'
+      else if (ratio > 0.85) status = 'yellow'
+      else status = 'green'
+    } else {
+      status = totalOut > 0 ? 'yellow' : 'green'
+    }
+  } else {
+    status = 'green'
+  }
+  return { totalOut, income, balance, status }
+}
+
+/**
  * Phase 1.5: 同一日に2件以上の引落がある日を検出。
  * Dashboard で「引落集中」アラートを出すために使用。
  */

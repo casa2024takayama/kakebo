@@ -4,8 +4,8 @@ import { CreditCard, Settings as SettingsIcon, AlertTriangle } from 'lucide-reac
 import { useStore } from '../store'
 import {
   getUpcomingWithdrawals,
-  getMonthlyDeficit,
   getConcentrationAlerts,
+  getDeficitForRange,
 } from '../lib/forecast'
 import { getCurrentAndNextCycles } from '../lib/payCycle'
 
@@ -46,25 +46,48 @@ export default function Dashboard() {
     applyFixedCostsIfNeeded()
   }, [applyFixedCostsIfNeeded])
 
-  // 翌月（カレンダー基準）
+  // 当月・翌月の境界
   const today = new Date()
+  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const currentMonthEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  const currentMonthEndISO = `${currentMonthEndDate.getFullYear()}-${String(currentMonthEndDate.getMonth() + 1).padStart(2, '0')}-${String(currentMonthEndDate.getDate()).padStart(2, '0')}`
   const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
-  const nextMonthLabel = `${nextMonthDate.getFullYear()}年${
-    nextMonthDate.getMonth() + 1
-  }月`
+  const nextMonthEndDate = new Date(nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1, 0)
+  const nextMonthStartISO = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`
+  const nextMonthEndISO = `${nextMonthEndDate.getFullYear()}-${String(nextMonthEndDate.getMonth() + 1).padStart(2, '0')}-${String(nextMonthEndDate.getDate()).padStart(2, '0')}`
+  const currentMonthLabel = `${today.getFullYear()}年${today.getMonth() + 1}月`
+  const nextMonthLabel = `${nextMonthDate.getFullYear()}年${nextMonthDate.getMonth() + 1}月`
 
   const monthlyIncome = settings.monthlyIncome ?? 0
 
+  // 今月の残り（today 〜 今月末）：信号色なし、情報表示用
+  const currentMonthRemaining = useMemo(
+    () =>
+      getDeficitForRange(
+        transactions,
+        billingGroups,
+        cards,
+        0,
+        todayISO,
+        currentMonthEndISO,
+        { evaluateSignal: false },
+      ),
+    [transactions, billingGroups, cards, todayISO, currentMonthEndISO],
+  )
+
+  // 翌月（カレンダー基準）：信号色あり、収入と比較
   const deficit = useMemo(
     () =>
-      getMonthlyDeficit(
+      getDeficitForRange(
         transactions,
         billingGroups,
         cards,
         monthlyIncome,
-        nextMonthDate,
+        nextMonthStartISO,
+        nextMonthEndISO,
+        { evaluateSignal: true },
       ),
-    [transactions, billingGroups, cards, monthlyIncome, nextMonthDate],
+    [transactions, billingGroups, cards, monthlyIncome, nextMonthStartISO, nextMonthEndISO],
   )
 
   const upcoming = useMemo(
@@ -100,10 +123,6 @@ export default function Dashboard() {
     () => getCurrentAndNextCycles(payDay, shiftRule, today),
     [payDay, shiftRule, today],
   )
-  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
-    2,
-    '0',
-  )}-${String(today.getDate()).padStart(2, '0')}`
 
   const currentCycleUsage = useMemo(() => {
     let total = 0
@@ -191,24 +210,49 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* ファーストビュー：翌月引落予定 */}
-      <section>
-        <p className="text-xs text-gray-500">{nextMonthLabel} の引落予定</p>
-        <p className="text-4xl font-bold tracking-tight tabular-nums mt-1">
-          ¥{fmt(deficit.totalOut)}
-        </p>
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-xs text-gray-500">
+      {/* 引落予定（今月の残り + 翌月）— PCで横並び、スマホ縦折り返し */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* 今月の残り（信号色なし、情報表示） */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+          <p className="text-xs text-gray-500">
+            {currentMonthLabel} の引落（残り）
+          </p>
+          <p className="text-[10px] text-gray-400">
+            {todayISO.slice(5).replace('-', '/')} 〜 {currentMonthEndISO.slice(5).replace('-', '/')}
+          </p>
+          <p className="text-3xl font-bold tracking-tight tabular-nums mt-2">
+            ¥{fmt(currentMonthRemaining.totalOut)}
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            今日以降に着弾予定の合計
+          </p>
+        </div>
+
+        {/* 翌月（信号色あり、収入比較） */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+          <div className="flex items-start justify-between">
+            <p className="text-xs text-gray-500">
+              {nextMonthLabel} の引落予定
+            </p>
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
+            >
+              {badge.label}
+            </span>
+          </div>
+          <p className="text-3xl font-bold tracking-tight tabular-nums mt-2">
+            ¥{fmt(deficit.totalOut)}
+          </p>
+          <div className="mt-2 text-xs text-gray-500">
             {monthlyIncome > 0 ? (
               <>
-                収入 ¥{fmt(deficit.income)} − 引落 ¥{fmt(deficit.totalOut)} ={' '}
+                収入 ¥{fmt(deficit.income)} −  ¥{fmt(deficit.totalOut)} ={' '}
                 <span
                   className={`font-semibold tabular-nums ${
                     deficit.balance < 0 ? 'text-danger' : 'text-accent'
                   }`}
                 >
-                  {deficit.balance < 0 ? '−' : '+'}¥
-                  {fmt(Math.abs(deficit.balance))}
+                  {deficit.balance < 0 ? '−' : '+'}¥{fmt(Math.abs(deficit.balance))}
                 </span>
               </>
             ) : (
@@ -217,18 +261,14 @@ export default function Dashboard() {
               </Link>
             )}
           </div>
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
-          >
-            {badge.label}
-          </span>
         </div>
-        {recordOnly.count > 0 && (
-          <p className="text-xs text-gray-400 mt-2">
-            📝 記録のみ {recordOnly.count}件 ¥{fmt(recordOnly.total)}（引落計算から除外）
-          </p>
-        )}
       </section>
+
+      {recordOnly.count > 0 && (
+        <p className="text-xs text-gray-400">
+          📝 記録のみ {recordOnly.count}件 ¥{fmt(recordOnly.total)}（引落計算から除外）
+        </p>
+      )}
 
       {/* 4請求グループ別の引落予定 */}
       <section className="space-y-2">
