@@ -128,6 +128,62 @@ export function getCycleForTransaction(
   }
 }
 
+/**
+ * v0.4.6: 実引落日（CSVから判明した actualWithdrawalDate）から請求期間を逆算する。
+ *
+ * 算法：
+ *   - 引落日が属する「引落月」を取り出す（土日繰延の影響は月跨ぎが稀なので簡略化、
+ *     繰延で翌月にズレた場合は警告コメント参照）
+ *   - サイクル終了 = 引落月の前月 closingDay
+ *   - サイクル開始 = サイクル終了の前月 closingDay の翌日
+ *
+ * 例：セゾン (closing=10, withdrawal=4) で actualWd=2026-05-07（GW繰延後）
+ *   → 引落月=5月 → 締め=4月10日 → サイクル開始=3月11日
+ *   → 戻り値: { cycleStart: '2026-03-11', cycleEnd: '2026-04-10', withdrawalDate: '2026-05-07' }
+ *
+ * 注意：
+ *   引落日が月初付近にあって繰延で前月→翌月の境界を跨いだ場合、引落月の判定がずれる
+ *   可能性があるが、実カードでは稀なので現状は単純に actualWd の月をそのまま使う。
+ */
+export function getCycleByWithdrawalDate(
+  actualWithdrawalDate: string,
+  group: BillingGroup,
+): { cycleStart: string; cycleEnd: string; withdrawalDate: string } {
+  const { y, m0 } = parseISO(actualWithdrawalDate)
+  // 締め月 = 引落月 - 1
+  let closeY = y
+  let closeM0 = m0 - 1
+  if (closeM0 < 0) {
+    closeM0 = 11
+    closeY = y - 1
+  }
+  const cycleEndD = clampDay(closeY, closeM0, group.closingDay)
+  // サイクル開始 = 締め月の前月 closingDay + 1
+  let prevY = closeY
+  let prevM0 = closeM0 - 1
+  if (prevM0 < 0) {
+    prevM0 = 11
+    prevY = closeY - 1
+  }
+  const prevCloseD = clampDay(prevY, prevM0, group.closingDay)
+  let startY = prevY
+  let startM0 = prevM0
+  let startD = prevCloseD + 1
+  if (startD > lastDayOfMonth(startY, startM0)) {
+    startD = 1
+    startM0 += 1
+    if (startM0 > 11) {
+      startM0 = 0
+      startY += 1
+    }
+  }
+  return {
+    cycleStart: toISO(startY, startM0, startD),
+    cycleEnd: toISO(closeY, closeM0, cycleEndD),
+    withdrawalDate: actualWithdrawalDate,
+  }
+}
+
 /** 今日以降で最も近い「次回引落日」と、その締め期間を返す */
 export function getNextCycleForGroup(
   group: BillingGroup,
