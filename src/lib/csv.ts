@@ -276,6 +276,8 @@ export async function parseSaisonCsv(
       categoryId,
       source: 'csv',
       kind: 'individual',
+      // v0.4.3: CSVに記載された実引落日を全明細に自動付与（請求遅延の繰越分も正しく5/7扱いに）
+      ...(withdrawalDate ? { actualWithdrawalDate: withdrawalDate } : {}),
     })
   }
 

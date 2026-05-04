@@ -1,11 +1,43 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Download, ChevronRight, Moon } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, ChevronRight, Moon, AlertCircle, Check } from 'lucide-react'
 import { useStore } from '../store'
+
+const BACKUP_VERSION = 1
+
+type BackupPayload = {
+  app: 'kakebo'
+  version: number
+  exportedAt: string
+  appVersion: string
+  data: {
+    categories: ReturnType<typeof useStore.getState>['categories']
+    transactions: ReturnType<typeof useStore.getState>['transactions']
+    fixedCosts: ReturnType<typeof useStore.getState>['fixedCosts']
+    settings: ReturnType<typeof useStore.getState>['settings']
+    billingGroups: ReturnType<typeof useStore.getState>['billingGroups']
+    cards: ReturnType<typeof useStore.getState>['cards']
+  }
+}
 
 export default function AppSettings() {
   const navigate = useNavigate()
-  const { settings, transactions, setSettings } = useStore()
+  const {
+    settings,
+    transactions,
+    categories,
+    fixedCosts,
+    billingGroups,
+    cards,
+    setSettings,
+    setCategories,
+    setTransactions,
+    setFixedCosts,
+    setBillingGroups,
+    setCards,
+  } = useStore()
+  const restoreFileRef = useRef<HTMLInputElement>(null)
+  const [restoreMsg, setRestoreMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [apiKey, setApiKey] = useState(settings.anthropicApiKey)
   const [showKey, setShowKey] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -58,6 +90,77 @@ export default function AppSettings() {
     const a = document.createElement('a')
     a.href = url; a.download = `kakebo_${new Date().toISOString().slice(0,10)}.csv`
     a.click(); URL.revokeObjectURL(url)
+  }
+
+  // v0.4.3: フルバックアップ（全データ）
+  const exportBackup = () => {
+    const payload: BackupPayload = {
+      app: 'kakebo',
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      appVersion: __APP_VERSION__,
+      data: { categories, transactions, fixedCosts, settings, billingGroups, cards },
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `kakebo_backup_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const onRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setRestoreMsg(null)
+    try {
+      const text = await file.text()
+      const payload = JSON.parse(text) as BackupPayload
+      if (payload.app !== 'kakebo') {
+        throw new Error('kakeboのバックアップファイルではありません')
+      }
+      if (typeof payload.version !== 'number' || payload.version > BACKUP_VERSION) {
+        throw new Error(`このバージョンのバックアップ(v${payload.version})は復元できません`)
+      }
+      const counts = {
+        categories: payload.data.categories?.length ?? 0,
+        transactions: payload.data.transactions?.length ?? 0,
+        fixedCosts: payload.data.fixedCosts?.length ?? 0,
+        billingGroups: payload.data.billingGroups?.length ?? 0,
+        cards: payload.data.cards?.length ?? 0,
+      }
+      const ok = confirm(
+        `バックアップを復元します。\n\n` +
+          `エクスポート: ${new Date(payload.exportedAt).toLocaleString('ja-JP')}\n` +
+          `アプリ版: ${payload.appVersion ?? '?'}\n\n` +
+          `カテゴリ ${counts.categories} / 取引 ${counts.transactions}\n` +
+          `固定費 ${counts.fixedCosts} / グループ ${counts.billingGroups} / カード ${counts.cards}\n\n` +
+          `現在のデータは全て上書きされます。続行しますか？`,
+      )
+      if (!ok) {
+        if (restoreFileRef.current) restoreFileRef.current.value = ''
+        return
+      }
+      // 全置換（順序：カテゴリ→グループ→カード→固定費→取引→設定）
+      if (payload.data.categories) setCategories(payload.data.categories)
+      if (payload.data.billingGroups) setBillingGroups(payload.data.billingGroups)
+      if (payload.data.cards) setCards(payload.data.cards)
+      if (payload.data.fixedCosts) setFixedCosts(payload.data.fixedCosts)
+      if (payload.data.transactions) setTransactions(payload.data.transactions)
+      if (payload.data.settings) setSettings(payload.data.settings)
+      setRestoreMsg({
+        type: 'ok',
+        text: `復元しました（取引 ${counts.transactions} 件 / カード ${counts.cards} 枚）`,
+      })
+    } catch (err) {
+      setRestoreMsg({
+        type: 'err',
+        text: err instanceof Error ? err.message : '復元に失敗しました',
+      })
+    } finally {
+      if (restoreFileRef.current) restoreFileRef.current.value = ''
+    }
   }
 
   return (
@@ -196,9 +299,56 @@ export default function AppSettings() {
         </button>
       </section>
 
-      {/* エクスポート */}
+      {/* フルバックアップ・復元（v0.4.3） */}
       <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-600">データエクスポート</h2>
+        <h2 className="text-sm font-semibold text-gray-600">バックアップ・復元（全データ）</h2>
+        <p className="text-xs text-gray-400">
+          設定・カード・グループ・取引・固定費を含む全データを1ファイルに書き出し、必要時に復元します。
+          テスト時のリセット対策や端末移行に。
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={exportBackup}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-accent text-white rounded-lg py-2.5 text-sm font-semibold"
+          >
+            <Download size={15} /> バックアップ書き出し
+          </button>
+          <button
+            onClick={() => restoreFileRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-1.5 border border-accent/40 text-accent rounded-lg py-2.5 text-sm font-medium hover:bg-accent/5"
+          >
+            <Upload size={15} /> 復元
+          </button>
+          <input
+            ref={restoreFileRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={onRestoreFile}
+          />
+        </div>
+        {restoreMsg && (
+          <div
+            className={`flex items-start gap-2 text-xs rounded-lg p-2.5 ${
+              restoreMsg.type === 'ok'
+                ? 'bg-accent/5 text-accent'
+                : 'bg-danger/5 text-danger'
+            }`}
+          >
+            {restoreMsg.type === 'ok' ? (
+              <Check size={14} className="flex-shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+            )}
+            <span>{restoreMsg.text}</span>
+          </div>
+        )}
+      </section>
+
+      {/* 単独エクスポート（取引のみ・既存機能） */}
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-600">取引のみエクスポート</h2>
+        <p className="text-xs text-gray-400">外部分析向け。設定・カード等は含まれません。</p>
         <div className="flex gap-2">
           <button
             onClick={exportJson}

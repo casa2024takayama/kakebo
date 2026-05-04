@@ -36,6 +36,7 @@ type Store = {
   cards: Card[]
 
   setCategories: (v: Category[]) => void
+  setTransactions: (v: Transaction[]) => void
   addTransaction: (t: Omit<Transaction, 'id'>) => void
   addTransactions: (ts: Omit<Transaction, 'id'>[]) => void
   deleteTransaction: (id: string) => void
@@ -84,6 +85,11 @@ export const useStore = create<Store>((set, get) => ({
   setCategories: (categories) => {
     storage.saveCategories(categories)
     set({ categories })
+  },
+
+  setTransactions: (transactions) => {
+    storage.saveTransactions(transactions)
+    set({ transactions })
   },
 
   addTransaction: (t) => {

@@ -55,20 +55,22 @@ export function getUpcomingWithdrawals(
     } else {
       cyc = getCycleForTransaction(t.date, group)
     }
+    // v0.4.3: 実引落日が設定されていれば優先
+    const wd = t.actualWithdrawalDate ?? cyc.withdrawalDate
     let g = buckets.get(groupId)
     if (!g) {
       g = new Map()
       buckets.set(groupId, g)
     }
-    const existing = g.get(cyc.withdrawalDate)
+    const existing = g.get(wd)
     if (existing) {
       existing.total += t.amount
     } else {
-      g.set(cyc.withdrawalDate, {
+      g.set(wd, {
         groupId,
         cycleStart: cyc.cycleStart,
         cycleEnd: cyc.cycleEnd,
-        withdrawalDate: cyc.withdrawalDate,
+        withdrawalDate: wd,
         total: t.amount,
       })
     }
@@ -155,7 +157,9 @@ export function getMonthlyDeficit(
     } else {
       cyc = getCycleForTransaction(t.date, group)
     }
-    if (cyc.withdrawalDate.startsWith(yyyymm)) {
+    // v0.4.3: 実引落日が設定されていれば優先
+    const wd = t.actualWithdrawalDate ?? cyc.withdrawalDate
+    if (wd.startsWith(yyyymm)) {
       totalOut += t.amount
     }
   }

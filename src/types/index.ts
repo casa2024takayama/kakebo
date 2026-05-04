@@ -40,6 +40,12 @@ export type Transaction = {
   billingMonth?: string
   /** Phase 1.5: 引落計算から除外（記録のみ）。請求一括との重複制御に使用 */
   excludeFromWithdrawal?: boolean
+  /**
+   * v0.4.3: 実際の引落日（YYYY-MM-DD）。
+   * カード会社のCSV取込時、CSVのメタデータに記載された支払日を全明細に自動付与。
+   * 値があれば理論計算より優先される（請求遅延などで実引落が理論サイクルとずれた場合に対応）。
+   */
+  actualWithdrawalDate?: string
 }
 
 export type FixedCost = {

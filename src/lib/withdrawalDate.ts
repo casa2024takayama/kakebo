@@ -18,19 +18,25 @@ export function computeDerivedDates(
   const group = groups.find((g) => g.id === card.billingGroupId)
   if (!group) return null
 
+  let cyc: { withdrawalDate: string; cycleStart: string; cycleEnd: string }
   if (t.kind === 'bulk' && t.billingPeriod) {
-    const cyc = getCycleForTransaction(t.billingPeriod.end, group)
-    return {
-      withdrawalDate: cyc.withdrawalDate,
+    const c = getCycleForTransaction(t.billingPeriod.end, group)
+    cyc = {
+      withdrawalDate: c.withdrawalDate,
       cycleStart: t.billingPeriod.start,
       cycleEnd: t.billingPeriod.end,
     }
+  } else if (t.kind === 'bulk' && t.billingMonth) {
+    cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
+  } else {
+    cyc = getCycleForTransaction(t.date, group)
   }
-  if (t.kind === 'bulk' && t.billingMonth) {
-    const cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
-    return cyc
+
+  // v0.4.3: actualWithdrawalDate があれば理論計算より優先（CSVのメタデータからの実引落日）
+  if (t.actualWithdrawalDate) {
+    return { ...cyc, withdrawalDate: t.actualWithdrawalDate }
   }
-  return getCycleForTransaction(t.date, group)
+  return cyc
 }
 
 // ============================================================
