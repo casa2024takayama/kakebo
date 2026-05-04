@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
-import { Upload, Check, AlertCircle } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Upload, Check, AlertCircle, History, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { parseCsv, parseSaisonCsv, type SaisonParseResult } from '../lib/csv'
 import { getCycleForTransaction } from '../lib/billingCycle'
+import { storage, type ImportLogEntry } from '../lib/storage'
 import type { Transaction } from '../types'
 
 type Preview = Omit<Transaction, 'id'>
@@ -29,6 +30,13 @@ export default function Import() {
   const [saisonResult, setSaisonResult] = useState<SaisonParseResult | null>(null)
   const [matchedCardId, setMatchedCardId] = useState<string>('')
   const [createBulkRecord, setCreateBulkRecord] = useState(true)
+  const [fileName, setFileName] = useState<string>('')
+  const [logs, setLogs] = useState<ImportLogEntry[]>([])
+  const [showLog, setShowLog] = useState(false)
+
+  useEffect(() => {
+    setLogs(storage.getImportLog())
+  }, [])
 
   const rules = categories.map((c) => ({ keyword: c.name, categoryId: c.id }))
 
@@ -39,6 +47,7 @@ export default function Import() {
     setDone(false)
     setPreviews([])
     setSaisonResult(null)
+    setFileName(file.name)
     try {
       if (preset === 'saison') {
         const r = await parseSaisonCsv(file, rules)
@@ -66,6 +75,8 @@ export default function Import() {
 
   const handleImport = () => {
     const toImport = previews.filter((_, i) => selected.has(i))
+    const skippedCount = previews.length - toImport.length
+    let bulkCreated = false
 
     if (preset === 'saison' && saisonResult) {
       const cardId = matchedCardId || undefined
@@ -140,11 +151,29 @@ export default function Import() {
             kind: 'bulk',
             billingMonth,
           })
+          bulkCreated = true
         }
       }
     } else {
       addTransactions(toImport)
     }
+
+    // インポート履歴記録
+    storage.appendImportLog({
+      ts: new Date().toISOString(),
+      preset,
+      fileName: fileName || '(unknown)',
+      cardName: saisonResult?.cardName,
+      detailsCount: toImport.length,
+      skippedCount,
+      bulkCreated,
+      totalBilled: bulkCreated ? saisonResult?.totalBilled : undefined,
+      note:
+        preset === 'saison' && previews.length === 0 && !bulkCreated
+          ? '明細0件・一括レコードも作成しなかったため何も保存されませんでした'
+          : undefined,
+    })
+    setLogs(storage.getImportLog())
 
     setPreviews([])
     setSelected(new Set())
@@ -213,6 +242,17 @@ export default function Import() {
       {done && (
         <div className="flex items-center gap-2 text-accent text-sm bg-accent/5 rounded-xl p-3 mb-4">
           <Check size={16} /> インポートが完了しました
+        </div>
+      )}
+
+      {/* 明細0件の警告（セゾンCSV解析後） */}
+      {saisonResult && previews.length === 0 && (
+        <div className="flex items-start gap-2 text-warning text-sm bg-warning/5 rounded-xl p-3 mb-4">
+          <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+          <div>
+            明細が0件です。CSVの列構造が想定と異なる可能性があります。
+            「請求一括レコードも作成」をONにすれば、合計額のみを登録できます（カード割当が必要）。
+          </div>
         </div>
       )}
 
@@ -322,15 +362,85 @@ export default function Import() {
         </>
       )}
 
-      {/* sticky な実行バー: 明細リストの長さに関係なく常時画面下部に表示 */}
-      {previews.length > 0 && (
+      {/* インポート履歴 */}
+      <div className="mt-6 mb-4">
+        <button
+          onClick={() => setShowLog((v) => !v)}
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+        >
+          <History size={14} />
+          インポート履歴 ({logs.length})
+          <span className="text-gray-400">{showLog ? '▲' : '▼'}</span>
+        </button>
+        {showLog && (
+          <div className="mt-2 space-y-1.5">
+            {logs.length === 0 ? (
+              <p className="text-xs text-gray-400 px-2 py-3">履歴はまだありません。</p>
+            ) : (
+              <>
+                {logs.slice(0, 30).map((log, i) => (
+                  <div
+                    key={i}
+                    className="bg-white dark:bg-gray-800 rounded-lg px-3 py-2 text-xs shadow-sm"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="font-medium truncate">{log.fileName}</span>
+                      <span className="text-gray-400 flex-shrink-0">
+                        {new Date(log.ts).toLocaleString('ja-JP', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <div className="text-gray-500 mt-1">
+                      {log.preset === 'saison' ? 'セゾン' : '汎用'}
+                      {log.cardName ? ` · ${log.cardName}` : ''}
+                      {' · '}明細{log.detailsCount}件
+                      {log.skippedCount > 0 ? ` (${log.skippedCount}件除外)` : ''}
+                      {log.bulkCreated
+                        ? ` · 一括¥${(log.totalBilled ?? 0).toLocaleString('ja-JP')}`
+                        : ''}
+                    </div>
+                    {log.note && (
+                      <p className="text-warning mt-1">{log.note}</p>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    if (confirm('インポート履歴を全削除しますか？取引データには影響しません。')) {
+                      storage.clearImportLog()
+                      setLogs([])
+                    }
+                  }}
+                  className="text-xs text-gray-400 hover:text-danger flex items-center gap-1 mt-2"
+                >
+                  <Trash2 size={12} /> 履歴をクリア
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* sticky な実行バー: 明細あり OR セゾン一括作成可能（previews=0でも合計>0 + カード割当ありなら表示） */}
+      {(previews.length > 0 ||
+        (preset === 'saison' &&
+          saisonResult &&
+          createBulkRecord &&
+          matchedCardId &&
+          saisonResult.totalBilled > 0)) && (
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md lg:max-w-6xl px-4 pointer-events-none z-40">
           <button
             onClick={handleImport}
-            disabled={selected.size === 0}
+            disabled={previews.length > 0 && selected.size === 0}
             className="pointer-events-auto w-full bg-accent text-white rounded-xl py-3.5 font-semibold disabled:opacity-40 shadow-lg"
           >
-            {selected.size}件をインポート
+            {previews.length > 0
+              ? `${selected.size}件をインポート`
+              : `請求一括¥${(saisonResult?.totalBilled ?? 0).toLocaleString('ja-JP')}を登録`}
           </button>
         </div>
       )}

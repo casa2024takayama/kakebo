@@ -210,23 +210,46 @@ export async function parseSaisonCsv(
   const totalParsed = parseAmount(totalRaw)
   const totalBilled = Number.isFinite(totalParsed) ? Math.abs(totalParsed) : 0
 
-  // 明細の開始行を探す（ヘッダ行が来るまで）
+  // 明細の開始行を探す（ヘッダ行が来るまで）と、ヘッダから列インデックスを動的検出
   let detailStart = 4
-  for (let i = 3; i < Math.min(rows.length, 12); i++) {
-    const cell = (rows[i]?.[0] ?? '').trim()
-    if (/利用日|ご利用日|日付/.test(cell)) {
+  let dateCol = 0
+  let memoCol = 1
+  let amountCol = -1
+  for (let i = 3; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i] ?? []
+    const firstCell = (row[0] ?? '').trim()
+    if (/利用日|ご利用日|日付/.test(firstCell)) {
       detailStart = i + 1
+      // ヘッダ列をスキャン
+      for (let j = 0; j < row.length; j++) {
+        const h = (row[j] ?? '').trim()
+        if (/利用日|ご利用日|日付/.test(h)) dateCol = j
+        else if (/利用店名|店舗|商品名|店名|内容|摘要|利用先/.test(h)) memoCol = j
+        else if (/利用金額|金額|請求額|支払金額/.test(h)) amountCol = j
+      }
       break
     }
+  }
+  // amountCol が見つからなければ、明細1行目を試走して数値が入っている列を採用
+  if (amountCol === -1 && rows[detailStart]) {
+    const probe = rows[detailStart]
+    for (let j = probe.length - 1; j >= 2; j--) {
+      const v = (probe[j] ?? '').trim().replace(/[^\d.-]/g, '')
+      if (v && Number.isFinite(Number(v)) && Number(v) !== 0) {
+        amountCol = j
+        break
+      }
+    }
+    if (amountCol === -1) amountCol = 5 // セゾン既定
   }
 
   const details: Omit<Transaction, 'id'>[] = []
   for (let i = detailStart; i < rows.length; i++) {
     const row = rows[i]
     if (!row) continue
-    const dateRaw = (row[0] ?? '').trim()
-    const memoRaw = (row[1] ?? '').trim()
-    const amountRaw = (row[2] ?? row[row.length - 1] ?? '').trim()
+    const dateRaw = (row[dateCol] ?? '').trim()
+    const memoRaw = (row[memoCol] ?? '').trim()
+    const amountRaw = (row[amountCol] ?? '').trim()
 
     if (!dateRaw && memoRaw && details.length > 0) {
       // 海外取引などの補足行 → 直前の明細のメモへ連結

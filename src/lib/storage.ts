@@ -21,6 +21,29 @@ const KEYS = {
   warnedMixedDates: 'kakebo_warned_mixed_dates',
   /** Timeline: ユーザーが表示するカードのフィルタ設定 */
   timelineFilter: 'kakebo_timeline_filter',
+  /** v0.4.2: CSVインポート履歴ログ */
+  importLog: 'kakebo_import_log',
+}
+
+export type ImportLogEntry = {
+  /** ISO timestamp */
+  ts: string
+  /** プリセット名 */
+  preset: 'generic' | 'saison'
+  /** 元ファイル名 */
+  fileName: string
+  /** カード名（セゾンのみ） */
+  cardName?: string
+  /** 取込された明細件数 */
+  detailsCount: number
+  /** 解析されたが取込しなかった件数（チェックを外した分） */
+  skippedCount: number
+  /** 請求一括レコード作成有無 */
+  bulkCreated: boolean
+  /** 請求合計（セゾンのみ、bulk作成時） */
+  totalBilled?: number
+  /** メモ・エラー等の補足 */
+  note?: string
 }
 
 /** Timeline: タイムライン画面でのカード表示フィルタ */
@@ -131,4 +154,13 @@ export const storage = {
   getTimelineFilter: () =>
     load<TimelineFilter>(KEYS.timelineFilter, { visibleCardIds: null }),
   saveTimelineFilter: (v: TimelineFilter) => save(KEYS.timelineFilter, v),
+
+  getImportLog: () => load<ImportLogEntry[]>(KEYS.importLog, []),
+  appendImportLog: (entry: ImportLogEntry) => {
+    const list = load<ImportLogEntry[]>(KEYS.importLog, [])
+    list.unshift(entry)
+    // 直近100件まで保持
+    save(KEYS.importLog, list.slice(0, 100))
+  },
+  clearImportLog: () => save(KEYS.importLog, []),
 }
