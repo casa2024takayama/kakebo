@@ -98,7 +98,11 @@ export default function Import() {
           const groupCardIds = cards
             .filter((c) => c.billingGroupId === group.id)
             .map((c) => c.id)
-          // 自動的に「個別＝記録のみ」に切替（案3）
+          // v0.4.5: 重複制御を「実引落日(actualWithdrawalDate)基準」に変更。
+          // 旧来の「理論サイクル期間 [cycleStart, cycleEnd]」基準だと、
+          // 請求遅延でCSVに含まれる前期繰越分（利用日が前サイクル）が範囲外で漏れていた。
+          // → 同じ実引落日に着弾する個別を確実に「記録のみ」化する。
+          const targetWd = saisonResult.withdrawalDate || cyc.withdrawalDate
           const dupes = transactions
             .filter(
               (t) =>
@@ -106,15 +110,11 @@ export default function Import() {
                 groupCardIds.includes(t.cardId) &&
                 (t.kind ?? 'individual') === 'individual' &&
                 t.excludeFromWithdrawal !== true &&
-                t.date >= cyc.cycleStart &&
-                t.date <= cyc.cycleEnd,
+                t.actualWithdrawalDate === targetWd,
             )
-          // 今追加した stamped も同時に「記録のみ」化したい：addTransactions 後に再取得は煩雑なので、
-          // 新規分は kind='individual' で excludeFromWithdrawal=true として直接登録し直すのが綺麗。
-          // しかし addTransactions は既に走った後なので、ここでは確認のうえ既存分のみ excludeFromWithdrawal を立てる。
           if (dupes.length > 0) {
             const ok = confirm(
-              `この請求期間に既存の個別取引が ${dupes.length}件あります。\n` +
+              `この引落日(${targetWd})に着弾する既存の個別取引が ${dupes.length}件あります。\n` +
                 `これらを「記録のみ（引落計算から除外）」にしますか？`,
             )
             if (ok) {
@@ -125,16 +125,13 @@ export default function Import() {
           }
 
           // 今インポートした明細自体も「記録のみ」にする（請求一括が引落計算の真値）
-          // → 直近の transactions を取り直す代わりに、「同じカード × 同じ請求月」で
-          //    新しく追加された分を全部 excludeFromWithdrawal=true にする
-          // ただし addTransactions は内部で id を振っているため、再取得して identify する
+          // 個別明細には parseSaisonCsv で actualWithdrawalDate=targetWd が付与済み
           const after = useStore.getState().transactions
           for (const t of after) {
             if (
               t.cardId === cardId &&
               (t.kind ?? 'individual') === 'individual' &&
-              t.date >= cyc.cycleStart &&
-              t.date <= cyc.cycleEnd &&
+              t.actualWithdrawalDate === targetWd &&
               t.excludeFromWithdrawal !== true
             ) {
               updateTransaction({ ...t, excludeFromWithdrawal: true })
@@ -145,7 +142,10 @@ export default function Import() {
             amount: saisonResult.totalBilled,
             categoryId: categories[0]?.id ?? 'other',
             memo: `セゾン請求一括（${billingMonth}）`,
-            date: saisonResult.withdrawalDate || cyc.withdrawalDate,
+            date: targetWd,
+            // v0.4.5: 実引落日を明示。これがないと computeDerivedDates が
+            // billingMonth から理論計算してしまい、bulkの引落日が誤った日(例:7/6)になる。
+            actualWithdrawalDate: targetWd,
             source: 'csv',
             cardId,
             kind: 'bulk',
