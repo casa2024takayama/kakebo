@@ -19,6 +19,14 @@ const KEYS = {
   migrationV03: 'kakebo_migration_v0_3',
   /** Sprint1: 利用日/引落日混在の警告を1度だけ出すためのフラグ */
   warnedMixedDates: 'kakebo_warned_mixed_dates',
+  /** Timeline: ユーザーが表示するカードのフィルタ設定 */
+  timelineFilter: 'kakebo_timeline_filter',
+}
+
+/** Timeline: タイムライン画面でのカード表示フィルタ */
+export type TimelineFilter = {
+  /** 表示するカードIDの配列。null = 全表示（初期状態） */
+  visibleCardIds: string[] | null
 }
 
 const DEFAULT_BILLING_GROUPS: BillingGroup[] = []
@@ -119,4 +127,8 @@ export const storage = {
 
   getWarnedMixedDates: () => load<string>(KEYS.warnedMixedDates, ''),
   saveWarnedMixedDates: (v: string) => save(KEYS.warnedMixedDates, v),
+
+  getTimelineFilter: () =>
+    load<TimelineFilter>(KEYS.timelineFilter, { visibleCardIds: null }),
+  saveTimelineFilter: (v: TimelineFilter) => save(KEYS.timelineFilter, v),
 }

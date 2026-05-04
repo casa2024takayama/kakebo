@@ -138,3 +138,69 @@ export function getCurrentAndNextCycles(
   const next = getPayCycleForDate(new Date(y, m - 1, d), payDay, shiftRule)
   return { current, next }
 }
+
+// ============================================================
+// 長期表示対応：範囲内の全サイクルを返す（メモ化付き）
+// ============================================================
+
+/**
+ * 指定範囲（startDate 〜 endDate, 両端含む）に重なる
+ * すべての給料日サイクルを時系列で返す。
+ *
+ * - サイクル開始 ≤ endDate かつ サイクル終了 ≥ startDate を満たすものを抽出
+ * - O(months) で計算（同一引数はメモ化）
+ *
+ * 例: 今日〜2027/5 を渡すと、その間のすべての給料日サイクルが返る
+ */
+const _cyclesCache = new Map<string, PayCycle[]>()
+
+export function getCyclesInRange(
+  startDate: Date,
+  endDate: Date,
+  payDay: DaySpec = 15,
+  shiftRule: PayDayShiftRule = 'before',
+): PayCycle[] {
+  const startISO = toISO(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate(),
+  )
+  const endISO = toISO(
+    endDate.getFullYear(),
+    endDate.getMonth(),
+    endDate.getDate(),
+  )
+  const cacheKey = `${startISO}|${endISO}|${payDay}|${shiftRule}`
+  const cached = _cyclesCache.get(cacheKey)
+  if (cached) return cached
+
+  const out: PayCycle[] = []
+  // 開始日を含むサイクルから走査開始
+  let cursor = getPayCycleForDate(startDate, payDay, shiftRule)
+  // 安全上限：120 サイクル ≒ 10年
+  let safety = 120
+  while (safety-- > 0) {
+    // 範囲と重なるか
+    if (cursor.end < startISO) {
+      // 範囲より前 → 次へ
+    } else if (cursor.start > endISO) {
+      // 範囲より後 → 終了
+      break
+    } else {
+      out.push(cursor)
+    }
+    // 次サイクル
+    const nextStartISO = addDays(cursor.end, 1)
+    const [y, m, d] = nextStartISO.split('-').map(Number)
+    cursor = getPayCycleForDate(new Date(y, m - 1, d), payDay, shiftRule)
+    if (cursor.start > endISO) break
+  }
+
+  _cyclesCache.set(cacheKey, out)
+  return out
+}
+
+/** テスト/デバッグ用：内部キャッシュをクリア */
+export function _clearPayCycleCache(): void {
+  _cyclesCache.clear()
+}
