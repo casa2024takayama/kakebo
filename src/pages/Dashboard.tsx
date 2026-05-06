@@ -138,6 +138,28 @@ export default function Dashboard() {
     return total
   }, [transactions, payCycles])
 
+  // v0.4.15 Stage3: 進行中サイクルのカード別利用累計
+  const currentCycleUsageByCard = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of transactions) {
+      if (!t.cardId) continue
+      if (t.kind === 'bulk') continue
+      if (t.excludeFromWithdrawal) continue
+      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+        map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
+      }
+    }
+    const arr = Array.from(map.entries())
+      .map(([cardId, total]) => ({
+        cardId,
+        cardName: cards.find((c) => c.id === cardId)?.name ?? '—',
+        color: cards.find((c) => c.id === cardId)?.color ?? '#7a6d5e',
+        total,
+      }))
+      .sort((a, b) => b.total - a.total)
+    return arr
+  }, [transactions, payCycles, cards])
+
   const cycleLengthDays = (() => {
     const [sy, sm, sd] = payCycles.current.start.split('-').map(Number)
     const [ey, em, ed] = payCycles.current.end.split('-').map(Number)
@@ -163,6 +185,17 @@ export default function Dashboard() {
   })()
   const dailyAvg =
     cycleLengthDays > 0 ? Math.round(currentCycleUsage / cycleLengthDays) : 0
+
+  // v0.4.15 Stage3: サイクル進捗% (今日が現サイクルのどこにいるか)
+  const cycleProgress = (() => {
+    if (cycleLengthDays <= 0) return 0
+    const passed = cycleLengthDays - remainingDays
+    return Math.min(100, Math.max(0, Math.round((passed / cycleLengthDays) * 100)))
+  })()
+  const cycleMaxPerCard = currentCycleUsageByCard.reduce(
+    (m, c) => Math.max(m, c.total),
+    0,
+  )
 
   // v0.4.13 Stage1: 給料日カード用の計算
   // 「今日〜給料日(=現サイクル末)までの引落合計」と「入金前の残高」を出す
@@ -299,6 +332,79 @@ export default function Dashboard() {
               設定から月収を入力
             </Link>{' '}
             すると、給料日までの収支見通しが表示されます。
+          </p>
+        )}
+      </section>
+
+      {/* v0.4.15 Stage3: 進行中サイクル + カード別利用バー */}
+      <section className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+            進行中サイクル
+          </p>
+          <p className="text-[10px] text-gray-400 tabular-nums">
+            {payCycles.current.start.slice(5).replace('-', '/')} 〜{' '}
+            {payCycles.current.end.slice(5).replace('-', '/')}
+          </p>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          次の給料日サイクル末に引かれる予定
+        </p>
+
+        <div className="flex items-end justify-between mt-3">
+          <p className="text-2xl md:text-3xl font-bold tabular-nums tracking-tight">
+            ¥{fmt(currentCycleUsage)}
+          </p>
+          <p className="text-[10px] text-gray-500">
+            サイクル進捗 <span className="font-semibold tabular-nums">{cycleProgress}%</span>
+          </p>
+        </div>
+        {/* 全体プログレスバー */}
+        <div className="mt-1.5 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-bronze-500"
+            style={{ width: `${cycleProgress}%`, backgroundColor: '#b87333' }}
+          />
+        </div>
+
+        {/* カード別バー */}
+        {currentCycleUsageByCard.length > 0 && (
+          <ul className="mt-3 space-y-2">
+            {currentCycleUsageByCard.map((c) => {
+              const pct =
+                cycleMaxPerCard > 0
+                  ? Math.round((c.total / cycleMaxPerCard) * 100)
+                  : 0
+              return (
+                <li
+                  key={c.cardId}
+                  className="flex items-center gap-2 text-[11px]"
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: c.color }}
+                  />
+                  <span className="flex-shrink-0 w-20 truncate">{c.cardName}</span>
+                  <div className="flex-1 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: c.color,
+                      }}
+                    />
+                  </div>
+                  <span className="flex-shrink-0 tabular-nums w-20 text-right">
+                    ¥{fmt(c.total)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {currentCycleUsageByCard.length === 0 && (
+          <p className="text-xs text-gray-400 mt-2">
+            このサイクルにカード利用がまだありません。
           </p>
         )}
       </section>
