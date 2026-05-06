@@ -12,11 +12,30 @@ export function computeDerivedDates(
   groups: BillingGroup[],
   cards: Card[],
 ): { withdrawalDate: string; cycleStart: string; cycleEnd: string } | null {
-  if (!t.cardId) return null
+  // v0.4.18: カード未割当（現金・ローン・サブスク等）は「利用日＝引落日」として扱う
+  if (!t.cardId) {
+    return {
+      cycleStart: t.date,
+      cycleEnd: t.date,
+      withdrawalDate: t.actualWithdrawalDate ?? t.date,
+    }
+  }
   const card = cards.find((c) => c.id === t.cardId)
-  if (!card) return null
+  if (!card) {
+    return {
+      cycleStart: t.date,
+      cycleEnd: t.date,
+      withdrawalDate: t.actualWithdrawalDate ?? t.date,
+    }
+  }
   const group = groups.find((g) => g.id === card.billingGroupId)
-  if (!group) return null
+  if (!group) {
+    return {
+      cycleStart: t.date,
+      cycleEnd: t.date,
+      withdrawalDate: t.actualWithdrawalDate ?? t.date,
+    }
+  }
 
   // v0.4.6: actualWithdrawalDate があれば、引落日と請求期間の両方を実引落日から逆算する。
   // billingMonth/billingPeriod から「次サイクル」を理論計算してしまう問題を解消。

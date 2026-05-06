@@ -8,7 +8,7 @@ import {
   getDeficitForRange,
 } from '../lib/forecast'
 import { getCurrentAndNextCycles } from '../lib/payCycle'
-import { getAllWithdrawalsInRange } from '../lib/withdrawalDate'
+import { getAllWithdrawalsInRange, computeDerivedDates } from '../lib/withdrawalDate'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -73,26 +73,23 @@ export default function Dashboard() {
   const currentCycleUsage = useMemo(() => {
     let total = 0
     for (const t of transactions) {
-      if (!t.cardId) continue
       if (t.excludeFromWithdrawal) continue
-      // v0.4.17: bulkも条件付きで含める（currentCycleUsageByCardと同じロジック）
-      if (t.kind === 'bulk') {
-        const wd = t.actualWithdrawalDate
-        if (!wd || wd <= payCycles.current.end) continue
-        const bp = t.billingPeriod
-        if (!bp) continue
-        const overlap =
-          bp.start <= payCycles.current.end && bp.end >= payCycles.current.start
-        if (!overlap) continue
-        total += t.amount
-        continue
-      }
-      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
-        total += t.amount
-      }
+      // v0.4.18: computeDerivedDates 経由で billingMonth/billingPeriod/カード未割当 全対応。
+      // 進行中サイクル = 引落日が「現サイクル末より後」かつ「使用日 (cycleStart～End) が現サイクルと重なる」
+      if (!t.cardId) continue // 非カード = 即時支払い、進行中サイクルには含めない
+      const derived = computeDerivedDates(t, billingGroups, cards)
+      if (!derived) continue
+      // 現サイクル末日より後に引落＝「給料日後に出る」=未来の負担 → 計上対象
+      if (derived.withdrawalDate <= payCycles.current.end) continue
+      // 利用期間が現サイクルと重なるか
+      const overlap =
+        derived.cycleStart <= payCycles.current.end &&
+        derived.cycleEnd >= payCycles.current.start
+      if (!overlap) continue
+      total += t.amount
     }
     return total
-  }, [transactions, payCycles])
+  }, [transactions, payCycles, billingGroups, cards])
 
   // v0.4.15 Stage3: 進行中サイクルのカード別利用累計
   const currentCycleUsageByCard = useMemo(() => {
@@ -100,24 +97,15 @@ export default function Dashboard() {
     for (const t of transactions) {
       if (!t.cardId) continue
       if (t.excludeFromWithdrawal) continue
-      // v0.4.17: bulkも進行中サイクルに含める（社長のPM要件）。
-      // 条件: billingPeriodが現サイクルと重なる AND 引落日が現サイクル末日より後
-      // → 「今のキャッシュアウト予定の積み上がり（給料日後に出るお金）」
-      if (t.kind === 'bulk') {
-        const wd = t.actualWithdrawalDate
-        if (!wd || wd <= payCycles.current.end) continue // 既に給料日までに出る引落は対象外
-        const bp = t.billingPeriod
-        if (!bp) continue
-        const overlap =
-          bp.start <= payCycles.current.end && bp.end >= payCycles.current.start
-        if (!overlap) continue
-        map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
-        continue
-      }
-      // 個別取引：利用日が現サイクル内
-      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
-        map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
-      }
+      // v0.4.18: computeDerivedDates 経由で統一処理。
+      const derived = computeDerivedDates(t, billingGroups, cards)
+      if (!derived) continue
+      if (derived.withdrawalDate <= payCycles.current.end) continue
+      const overlap =
+        derived.cycleStart <= payCycles.current.end &&
+        derived.cycleEnd >= payCycles.current.start
+      if (!overlap) continue
+      map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
     }
     const arr = Array.from(map.entries())
       .map(([cardId, total]) => ({
