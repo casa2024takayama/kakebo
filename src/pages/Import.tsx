@@ -18,6 +18,7 @@ export default function Import() {
     addTransactions,
     transactions,
     updateTransaction,
+    deleteTransaction,
   } = useStore()
   const fileRef = useRef<HTMLInputElement>(null)
   const [preset, setPreset] = useState<Preset>('generic')
@@ -137,6 +138,22 @@ export default function Import() {
             ) {
               updateTransaction({ ...t, excludeFromWithdrawal: true })
             }
+          }
+
+          // v0.4.10: 既存の同一(カード × 請求月)のbulkを削除して上書き。
+          // v0.4.7以前で作られた壊れたbulk（actualWithdrawalDateが誤った値）が
+          // 残ると二重計上になるため、再取込時に必ずクリーンアップする。
+          const stateNow = useStore.getState()
+          const existingBulks = stateNow.transactions.filter(
+            (t) =>
+              t.kind === 'bulk' &&
+              t.cardId === cardId &&
+              (t.billingMonth === billingMonth ||
+                (t.billingPeriod && t.billingPeriod.start.startsWith(billingMonth)) ||
+                (t.billingPeriod && t.billingPeriod.end.startsWith(billingMonth))),
+          )
+          for (const ob of existingBulks) {
+            deleteTransaction(ob.id)
           }
 
           addTransaction({

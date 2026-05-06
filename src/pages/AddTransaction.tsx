@@ -17,6 +17,7 @@ export default function AddTransaction() {
     billingGroups,
     transactions,
     updateTransaction,
+    deleteTransaction,
   } = useStore()
   const [mode, setMode] = useState<Mode>('individual')
 
@@ -99,6 +100,18 @@ export default function AddTransaction() {
     )
 
     const proceed = () => {
+      // v0.4.10: 同じ(カード × 請求月)の既存bulkを削除して上書き
+      const existingBulks = transactions.filter(
+        (t) =>
+          t.kind === 'bulk' &&
+          t.cardId === bulkCardId &&
+          (t.billingMonth === bulkBillingMonth ||
+            (t.billingPeriod && t.billingPeriod.start.startsWith(bulkBillingMonth)) ||
+            (t.billingPeriod && t.billingPeriod.end.startsWith(bulkBillingMonth))),
+      )
+      for (const ob of existingBulks) {
+        deleteTransaction(ob.id)
+      }
       addTransaction({
         amount: n,
         categoryId: categories[0]?.id ?? 'other',
