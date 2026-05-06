@@ -278,12 +278,13 @@ export async function parseSaisonCsv(
   // カード名: ヘッダ行に到達するまでの行から「カード」「Card」を含むセルや、
   // 「カード名称」というラベル行の右セルを探す。固定の[0][0]に依存しない。
   const cardName = extractSaisonCardName(rows)
-  // 支払日: 「支払日」「お支払日」というラベルを含むセルの右、または2行目をフォールバック
-  const withdrawalDateRaw = extractSaisonByLabel(rows, /支払日|引落|引き落とし/)
+  // v0.4.12: 支払日ラベルに「い」が入る変種（イオン「お支払い日」）に対応。
+  // 「お?支払い?日」で以下4パターンすべてマッチ: 支払日 / 支払い日 / お支払日 / お支払い日
+  const withdrawalDateRaw = extractSaisonByLabel(rows, /お?支払い?日|引落|引き落とし/)
     ?? (rows[1]?.[1] ?? rows[1]?.[0] ?? '').trim()
   const withdrawalDate = parseDateLoose(withdrawalDateRaw) ?? ''
   // 請求合計: 「ご請求金額」「請求金額」「お支払い金額」ラベルの右、または3行目フォールバック
-  const totalRaw = extractSaisonByLabel(rows, /請求金額|お支払い金額|今回|合計/)
+  const totalRaw = extractSaisonByLabel(rows, /請求金額|お?支払い?金額|今回|合計/)
     ?? (rows[2]?.[1] ?? rows[2]?.[0] ?? '0')
   const totalParsed = parseAmount(totalRaw)
   const totalBilled = Number.isFinite(totalParsed) ? Math.abs(totalParsed) : 0
