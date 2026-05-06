@@ -8,6 +8,7 @@ import {
   getDeficitForRange,
 } from '../lib/forecast'
 import { getCurrentAndNextCycles } from '../lib/payCycle'
+import { getAllWithdrawalsInRange } from '../lib/withdrawalDate'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -194,6 +195,44 @@ export default function Dashboard() {
     [upcoming, todayISO, payDateISO],
   )
 
+  // v0.4.14 Stage2: 給料日までの引落リスト（カード × 引落日 で集約、日付昇順）
+  const upcomingByPayday = useMemo(() => {
+    const [ty, tm, td] = todayISO.split('-').map(Number)
+    const [py, pm, pd] = payDateISO.split('-').map(Number)
+    const todayDate = new Date(ty, tm - 1, td)
+    const payDate = new Date(py, pm - 1, pd)
+    return getAllWithdrawalsInRange(
+      transactions,
+      cards,
+      billingGroups,
+      todayDate,
+      payDate,
+    )
+  }, [transactions, cards, billingGroups, todayISO, payDateISO])
+
+  const cardNameOf = (cardId: string): string =>
+    cards.find((c) => c.id === cardId)?.name ?? '—'
+
+  const daysUntil = (iso: string): number => {
+    const [y, m, d] = iso.split('-').map(Number)
+    const [ty, tm, td] = todayISO.split('-').map(Number)
+    return Math.max(
+      0,
+      Math.round(
+        (new Date(y, m - 1, d).getTime() -
+          new Date(ty, tm - 1, td).getTime()) /
+          86400000,
+      ),
+    )
+  }
+
+  const dayOfWeekLabel = (iso: string): string => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return ['日', '月', '火', '水', '木', '金', '土'][
+      new Date(y, m - 1, d).getDay()
+    ] + '曜日'
+  }
+
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
       {/* v0.4.13 Stage1: 給料日カード（給料日までの収支見通し） */}
@@ -263,6 +302,52 @@ export default function Dashboard() {
           </p>
         )}
       </section>
+
+      {/* v0.4.14 Stage2: 給料日までの引落リスト */}
+      {upcomingByPayday.length > 0 && (
+        <section className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              給料日({payDateISO.slice(5).replace('-', '/')})までの引落
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {upcomingByPayday.length}件 ・ 確定済
+            </p>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+            {upcomingByPayday.map((w, i) => {
+              const [, m, d] = w.withdrawalDate.split('-')
+              const days = daysUntil(w.withdrawalDate)
+              return (
+                <li
+                  key={`${w.cardId}|${w.withdrawalDate}|${i}`}
+                  className="flex items-center gap-3 py-2.5"
+                >
+                  <div className="flex-shrink-0 w-12 text-center bg-gray-100 dark:bg-gray-700 rounded-lg py-1">
+                    <p className="text-[10px] text-gray-500">
+                      {parseInt(m, 10)}月
+                    </p>
+                    <p className="text-base font-bold tabular-nums leading-none">
+                      {parseInt(d, 10)}
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {cardNameOf(w.cardId)}
+                    </p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      あと{days}日 ・ {dayOfWeekLabel(w.withdrawalDate)}
+                    </p>
+                  </div>
+                  <p className="text-base font-bold tabular-nums tracking-tight flex-shrink-0">
+                    ¥{fmt(w.total)}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Sprint1: 現サイクルのカード利用累計 */}
       <section className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
