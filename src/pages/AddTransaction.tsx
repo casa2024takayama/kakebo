@@ -77,8 +77,11 @@ export default function AddTransaction() {
       setError('請求グループが見つかりません')
       return
     }
-    // 該当カード × 締め期間内の既存個別取引を検出
+    // v0.4.9: 該当カード × 同じ実引落日（actualWithdrawalDate）の既存個別取引を検出。
+    // 旧来の「理論サイクル期間内の date」基準だと、CSV取込で
+    // actualWithdrawalDate=5/7 が付与された個別が漏れることがあった。
     const cyc = getCycleForTransaction(`${bulkBillingMonth}-15`, group)
+    const targetWd = cyc.withdrawalDate
     const groupCardIds = cards
       .filter((c) => c.billingGroupId === group.id)
       .map((c) => c.id)
@@ -88,8 +91,11 @@ export default function AddTransaction() {
         groupCardIds.includes(t.cardId) &&
         (t.kind ?? 'individual') === 'individual' &&
         t.excludeFromWithdrawal !== true &&
-        t.date >= cyc.cycleStart &&
-        t.date <= cyc.cycleEnd,
+        // actualWithdrawalDate がある個別はそれで判定、無い古いデータは date が cycle 内かでフォールバック
+        ((t.actualWithdrawalDate && t.actualWithdrawalDate === targetWd) ||
+          (!t.actualWithdrawalDate &&
+            t.date >= cyc.cycleStart &&
+            t.date <= cyc.cycleEnd)),
     )
 
     const proceed = () => {
@@ -97,10 +103,11 @@ export default function AddTransaction() {
         amount: n,
         categoryId: categories[0]?.id ?? 'other',
         memo: `請求一括（${bulkBillingMonth}）`,
-        // 利用日は保存しない代わりに、請求期間の末日（締め日）を date に入れる。
-        // Transaction.date は「利用日」フィールドだが、請求一括の場合は
-        // 「期間を代表する日 = 締め日」として扱い、引落日では絶対に上書きしない。
         date: cyc.cycleEnd,
+        // v0.4.9: 手動bulk作成でも actualWithdrawalDate を明示。
+        // これがないと computeDerivedDates が billingPeriod から理論計算してしまい、
+        // 結果として「次サイクル」の引落日になる（例: AEON 5月締めだと7/2扱い）。
+        actualWithdrawalDate: cyc.withdrawalDate,
         source: 'manual',
         cardId: bulkCardId,
         kind: 'bulk',
@@ -111,7 +118,7 @@ export default function AddTransaction() {
 
     if (dupes.length > 0) {
       const ok = confirm(
-        `同一カード × 締め期間内に個別取引が ${dupes.length}件あります。\n` +
+        `同一カード × 同じ引落日(${targetWd})の個別取引が ${dupes.length}件あります。\n` +
           `これらを「記録のみ（引落計算から除外）」にしますか？\n` +
           `※OKで除外、キャンセルすると個別と請求一括が二重計上されます。`,
       )

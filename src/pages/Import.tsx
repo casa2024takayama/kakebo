@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Upload, Check, AlertCircle, History, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
-import { parseCsv, parseSaisonCsv, type SaisonParseResult } from '../lib/csv'
+import { parseCsv, parseSaisonCsv, matchCardByName, type SaisonParseResult } from '../lib/csv'
 import { getCycleForTransaction } from '../lib/billingCycle'
 import { storage, type ImportLogEntry } from '../lib/storage'
 import type { Transaction } from '../types'
@@ -52,8 +52,9 @@ export default function Import() {
       if (preset === 'saison' || preset === 'aeon') {
         const r = await parseSaisonCsv(file, rules)
         setSaisonResult(r)
-        // カード自動マッチング
-        const m = cards.find((c) => c.name.includes(r.cardName) || r.cardName.includes(c.name))
+        // v0.4.9: カード自動マッチング（正規化ベース）
+        // 「イオンゴールド」と「イオンカード（ゴールド）」のような表記揺れを吸収
+        const m = matchCardByName(r.cardName, cards)
         setMatchedCardId(m?.id ?? '')
         setPreviews(r.details)
         setSelected(new Set(r.details.map((_, i) => i)))

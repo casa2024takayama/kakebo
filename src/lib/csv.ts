@@ -119,6 +119,55 @@ export type SaisonParseResult = {
 }
 
 /**
+ * v0.4.9: カード名の正規化（ゆるい一致のため）。
+ * カード会社の固有名（イオン/セゾン/JCB/楽天等）だけ残して、
+ * グレード（ゴールド/プラチナ）やブランド（VISA/MASTER/AMEX）、
+ * 装飾語（カード/American Express/・/（））を取り除く。
+ *
+ * 例:
+ *   「イオンゴールド」 → 「いおん」
+ *   「イオンカード（ゴールド）」 → 「いおん」
+ *   「セゾンゴールド・アメリカン・エキスプレス・カード」 → 「せぞん」
+ */
+export function normalizeCardName(s: string): string {
+  if (!s) return ''
+  return s
+    .normalize('NFKC')
+    .toLowerCase()
+    // ブランド・グレード・装飾語を除去
+    .replace(
+      /カード|card|ゴールド|gold|プラチナ|platinum|アメリカン・?エキスプレス|アメックス|american\s*express|amex|visa|master|mastercard|jcb|プレミアム|premium/g,
+      '',
+    )
+    // 記号・括弧・スペースを除去
+    .replace(/[（）()・\s]/g, '')
+    .trim()
+}
+
+/**
+ * 取込CSVのカード名と既存登録カードの名前のゆるい一致判定。
+ * 完全一致 / 部分一致（正規化後）どちらでもOK。
+ */
+export function matchCardByName<T extends { name: string }>(
+  csvCardName: string,
+  cards: T[],
+): T | undefined {
+  // (1) 元の文字列で部分一致（既存挙動の互換）
+  const direct = cards.find(
+    (c) => c.name.includes(csvCardName) || csvCardName.includes(c.name),
+  )
+  if (direct) return direct
+  // (2) 正規化して部分一致
+  const a = normalizeCardName(csvCardName)
+  if (!a) return undefined
+  return cards.find((c) => {
+    const b = normalizeCardName(c.name)
+    if (!b) return false
+    return a.includes(b) || b.includes(a)
+  })
+}
+
+/**
  * セゾンCSVヘッダ部からカード名を柔軟に抽出。
  * 1行目固定の rows[0][0] では脆弱なので、以下の順で探す：
  * 1. 「カード名称」「カード名」ラベル行の右セル
