@@ -74,14 +74,18 @@ export default function Dashboard() {
     let total = 0
     for (const t of transactions) {
       if (t.excludeFromWithdrawal) continue
-      // v0.4.18: computeDerivedDates 経由で billingMonth/billingPeriod/カード未割当 全対応。
-      // 進行中サイクル = 引落日が「現サイクル末より後」かつ「使用日 (cycleStart～End) が現サイクルと重なる」
-      if (!t.cardId) continue // 非カード = 即時支払い、進行中サイクルには含めない
+      // v0.4.19: 非カード取引も含める（社長指示）
+      // - カード: billingPeriodが現サイクルと重なる AND 引落日が現サイクル末より後
+      // - 非カード: 利用日が現サイクル内（=その日に出た出費）
+      if (!t.cardId) {
+        if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+          total += t.amount
+        }
+        continue
+      }
       const derived = computeDerivedDates(t, billingGroups, cards)
       if (!derived) continue
-      // 現サイクル末日より後に引落＝「給料日後に出る」=未来の負担 → 計上対象
       if (derived.withdrawalDate <= payCycles.current.end) continue
-      // 利用期間が現サイクルと重なるか
       const overlap =
         derived.cycleStart <= payCycles.current.end &&
         derived.cycleEnd >= payCycles.current.start
@@ -90,6 +94,21 @@ export default function Dashboard() {
     }
     return total
   }, [transactions, payCycles, billingGroups, cards])
+
+  // v0.4.19: 非カード取引の進行中サイクル集計（カード別バーの下に表示）
+  const currentCycleNonCard = useMemo(() => {
+    let count = 0
+    let total = 0
+    for (const t of transactions) {
+      if (t.excludeFromWithdrawal) continue
+      if (t.cardId) continue
+      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+        count += 1
+        total += t.amount
+      }
+    }
+    return { count, total }
+  }, [transactions, payCycles])
 
   // v0.4.15 Stage3: 進行中サイクルのカード別利用累計
   const currentCycleUsageByCard = useMemo(() => {
@@ -171,17 +190,8 @@ export default function Dashboard() {
   const remainingBalance = monthlyIncome - balanceBeforePayday.totalOut
   const isPositive = remainingBalance >= 0
 
-  // 給料日までの引落件数（カード別 × 引落日 で集約）
-  const payDateUpcomingCount = useMemo(
-    () =>
-      upcoming.filter(
-        (f) =>
-          f.cycle.total > 0 &&
-          f.cycle.withdrawalDate >= todayISO &&
-          f.cycle.withdrawalDate <= payDateISO,
-      ).length,
-    [upcoming, todayISO, payDateISO],
-  )
+  // v0.4.19: 件数は upcomingByPayday（取引ベース）から正確に算出
+  // 旧来は upcoming（グループベース）で件数が削除に追従しないバグがあった
 
   // v0.4.14 Stage2: 給料日までの引落リスト（カード × 引落日 で集約、日付昇順）
   const upcomingByPayday = useMemo(() => {
@@ -265,9 +275,9 @@ export default function Dashboard() {
               <p className="text-xl md:text-2xl font-bold tabular-nums tracking-tight mt-1 text-danger">
                 −¥{fmt(balanceBeforePayday.totalOut)}
               </p>
-              {payDateUpcomingCount > 0 && (
+              {upcomingByPayday.length > 0 && (
                 <p className="text-[10px] text-gray-400 mt-0.5">
-                  {payDateUpcomingCount}件
+                  {upcomingByPayday.length}件
                 </p>
               )}
             </div>
@@ -360,9 +370,44 @@ export default function Dashboard() {
             })}
           </ul>
         )}
-        {currentCycleUsageByCard.length === 0 && (
+        {/* 非カード取引（住宅ローン・サブスク等）— 集約1行 */}
+        {currentCycleNonCard.count > 0 && (
+          <ul className="mt-2 space-y-2">
+            <li className="flex items-center gap-2 text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gray-400" />
+              <span className="flex-shrink-0 w-20 truncate text-gray-500">
+                非カード取引
+              </span>
+              <div className="flex-1 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gray-400"
+                  style={{
+                    width: `${
+                      cycleMaxPerCard > 0
+                        ? Math.min(100, Math.round((currentCycleNonCard.total / cycleMaxPerCard) * 100))
+                        : 100
+                    }%`,
+                  }}
+                />
+              </div>
+              <span className="flex-shrink-0 tabular-nums w-20 text-right text-gray-600">
+                {currentCycleNonCard.count}件 ¥{fmt(currentCycleNonCard.total)}
+              </span>
+            </li>
+          </ul>
+        )}
+
+        {/* 末尾の合計表示 */}
+        {(currentCycleUsageByCard.length > 0 || currentCycleNonCard.count > 0) && (
+          <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs">
+            <span className="text-gray-500">合計</span>
+            <span className="font-bold tabular-nums">¥{fmt(currentCycleUsage)}</span>
+          </div>
+        )}
+
+        {currentCycleUsageByCard.length === 0 && currentCycleNonCard.count === 0 && (
           <p className="text-xs text-gray-400 mt-2">
-            このサイクルにカード利用がまだありません。
+            このサイクルにカード利用・非カード取引がまだありません。
           </p>
         )}
       </section>

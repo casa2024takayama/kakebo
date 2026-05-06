@@ -109,13 +109,26 @@ export function getAllWithdrawalsInRange(
   const map = new Map<string, WithdrawalEntry>()
 
   for (const t of transactions) {
-    if (!t.cardId) continue
     if (t.excludeFromWithdrawal) continue
-    const card = cards.find((c) => c.id === t.cardId)
-    if (!card) continue
     const derived = computeDerivedDates(t, groups, cards)
     if (!derived) continue
     if (!isoBetween(derived.withdrawalDate, startISO, endISO)) continue
+
+    // v0.4.19: 非カード取引（住宅ローン・サブスク等）も含める。各取引を独立したエントリで保持。
+    if (!t.cardId) {
+      map.set(`cash:${t.id}`, {
+        withdrawalDate: derived.withdrawalDate,
+        cycleStart: derived.cycleStart,
+        cycleEnd: derived.cycleEnd,
+        cardId: '',
+        groupId: '',
+        transactions: [t],
+        total: t.amount,
+      })
+      continue
+    }
+    const card = cards.find((c) => c.id === t.cardId)
+    if (!card) continue
 
     const key = `${card.id}|${derived.withdrawalDate}`
     const existing = map.get(key)

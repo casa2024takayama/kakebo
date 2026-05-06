@@ -114,7 +114,8 @@ export default function AddTransaction() {
       }
       addTransaction({
         amount: n,
-        categoryId: categories[0]?.id ?? 'other',
+        // v0.4.19: 手動bulkはカテゴリ不要（社長指示）。空文字で保存し、表示時に省略。
+        categoryId: '',
         memo: `請求一括（${bulkBillingMonth}）`,
         date: cyc.cycleEnd,
         // v0.4.9: 手動bulk作成でも actualWithdrawalDate を明示。
