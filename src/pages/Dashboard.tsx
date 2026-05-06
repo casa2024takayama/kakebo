@@ -74,8 +74,19 @@ export default function Dashboard() {
     let total = 0
     for (const t of transactions) {
       if (!t.cardId) continue
-      if (t.kind === 'bulk') continue // 利用日基準なので一括は除外
       if (t.excludeFromWithdrawal) continue
+      // v0.4.17: bulkも条件付きで含める（currentCycleUsageByCardと同じロジック）
+      if (t.kind === 'bulk') {
+        const wd = t.actualWithdrawalDate
+        if (!wd || wd <= payCycles.current.end) continue
+        const bp = t.billingPeriod
+        if (!bp) continue
+        const overlap =
+          bp.start <= payCycles.current.end && bp.end >= payCycles.current.start
+        if (!overlap) continue
+        total += t.amount
+        continue
+      }
       if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
         total += t.amount
       }
@@ -88,8 +99,22 @@ export default function Dashboard() {
     const map = new Map<string, number>()
     for (const t of transactions) {
       if (!t.cardId) continue
-      if (t.kind === 'bulk') continue
       if (t.excludeFromWithdrawal) continue
+      // v0.4.17: bulkも進行中サイクルに含める（社長のPM要件）。
+      // 条件: billingPeriodが現サイクルと重なる AND 引落日が現サイクル末日より後
+      // → 「今のキャッシュアウト予定の積み上がり（給料日後に出るお金）」
+      if (t.kind === 'bulk') {
+        const wd = t.actualWithdrawalDate
+        if (!wd || wd <= payCycles.current.end) continue // 既に給料日までに出る引落は対象外
+        const bp = t.billingPeriod
+        if (!bp) continue
+        const overlap =
+          bp.start <= payCycles.current.end && bp.end >= payCycles.current.start
+        if (!overlap) continue
+        map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
+        continue
+      }
+      // 個別取引：利用日が現サイクル内
       if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
         map.set(t.cardId, (map.get(t.cardId) ?? 0) + t.amount)
       }

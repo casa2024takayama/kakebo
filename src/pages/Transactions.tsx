@@ -64,23 +64,19 @@ export default function Transactions() {
       } else if (filter === 'recordOnly') {
         if (!t.excludeFromWithdrawal) return false
       } else if (filter === 'current') {
-        const refDate =
-          viewMode === 'withdrawal' && derived
-            ? derived.withdrawalDate
-            : t.date
+        // v0.4.14: サイクルフィルタは引落日基準で固定（viewModeに依存しない）。
+        // 引落日が無い（カード未割当の現金等）は利用日にフォールバック。
+        const refDate = derived ? derived.withdrawalDate : t.date
         if (refDate < cycles.current.start || refDate > cycles.current.end)
           return false
       } else if (filter === 'next') {
-        const refDate =
-          viewMode === 'withdrawal' && derived
-            ? derived.withdrawalDate
-            : t.date
+        const refDate = derived ? derived.withdrawalDate : t.date
         if (refDate < cycles.next.start || refDate > cycles.next.end)
           return false
       }
       return true
     })
-  }, [enriched, filter, viewMode, cycles])
+  }, [enriched, filter, cycles])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
