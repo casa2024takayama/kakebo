@@ -163,8 +163,107 @@ export default function Dashboard() {
   const dailyAvg =
     cycleLengthDays > 0 ? Math.round(currentCycleUsage / cycleLengthDays) : 0
 
+  // v0.4.13 Stage1: 給料日カード用の計算
+  // 「今日〜給料日(=現サイクル末)までの引落合計」と「入金前の残高」を出す
+  const payDateISO = payCycles.current.end // 給料日 = 現サイクル末日（実装上）
+  const balanceBeforePayday = useMemo(
+    () =>
+      getDeficitForRange(
+        transactions,
+        billingGroups,
+        cards,
+        monthlyIncome,
+        todayISO,
+        payDateISO,
+        { evaluateSignal: true },
+      ),
+    [transactions, billingGroups, cards, monthlyIncome, todayISO, payDateISO],
+  )
+  const remainingBalance = monthlyIncome - balanceBeforePayday.totalOut
+  const isPositive = remainingBalance >= 0
+
+  // 給料日までの引落件数（カード別 × 引落日 で集約）
+  const payDateUpcomingCount = useMemo(
+    () =>
+      upcoming.filter(
+        (f) =>
+          f.cycle.total > 0 &&
+          f.cycle.withdrawalDate >= todayISO &&
+          f.cycle.withdrawalDate <= payDateISO,
+      ).length,
+    [upcoming, todayISO, payDateISO],
+  )
+
   return (
     <div className="px-4 pt-6 pb-4 space-y-6">
+      {/* v0.4.13 Stage1: 給料日カード（給料日までの収支見通し） */}
+      <section className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              給料日まで
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              あと{remainingDays}日 ・ {payDateISO.slice(5).replace('-', '/')}入金予定
+            </p>
+          </div>
+          {monthlyIncome > 0 && (
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                isPositive ? 'bg-accent/10 text-accent' : 'bg-danger/10 text-danger'
+              }`}
+            >
+              {isPositive ? '黒字' : '赤字'}
+            </span>
+          )}
+        </div>
+
+        {monthlyIncome > 0 ? (
+          <div className="grid grid-cols-3 gap-2 items-end">
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">
+                今日の残高
+              </p>
+              <p className="text-xl md:text-2xl font-bold tabular-nums tracking-tight mt-1">
+                ¥{fmt(monthlyIncome)}
+              </p>
+            </div>
+            <div className="relative">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">
+                給料日までの引落
+              </p>
+              <p className="text-xl md:text-2xl font-bold tabular-nums tracking-tight mt-1 text-danger">
+                −¥{fmt(balanceBeforePayday.totalOut)}
+              </p>
+              {payDateUpcomingCount > 0 && (
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {payDateUpcomingCount}件
+                </p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">
+                入金前の残高
+              </p>
+              <p
+                className={`text-xl md:text-2xl font-bold tabular-nums tracking-tight mt-1 ${
+                  isPositive ? 'text-accent' : 'text-danger'
+                }`}
+              >
+                ¥{fmt(remainingBalance)}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500">
+            <Link to="/settings" className="text-accent underline">
+              設定から月収を入力
+            </Link>{' '}
+            すると、給料日までの収支見通しが表示されます。
+          </p>
+        )}
+      </section>
+
       {/* Sprint1: 現サイクルのカード利用累計 */}
       <section className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
         <p className="text-xs text-accent font-semibold">
