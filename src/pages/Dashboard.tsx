@@ -19,21 +19,6 @@ function formatDateLabel(iso: string): string {
   return `${parseInt(m, 10)}/${parseInt(d, 10)}`
 }
 
-function statusBadge(status: 'green' | 'yellow' | 'red'): {
-  label: string
-  bg: string
-  fg: string
-} {
-  switch (status) {
-    case 'green':
-      return { label: '黒字', bg: 'bg-accent/10', fg: 'text-accent' }
-    case 'yellow':
-      return { label: 'ギリギリ', bg: 'bg-warning/10', fg: 'text-warning' }
-    case 'red':
-      return { label: '赤字', bg: 'bg-danger/10', fg: 'text-danger' }
-  }
-}
-
 export default function Dashboard() {
   const {
     transactions,
@@ -50,46 +35,8 @@ export default function Dashboard() {
   // 当月・翌月の境界
   const today = new Date()
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  const currentMonthEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-  const currentMonthEndISO = `${currentMonthEndDate.getFullYear()}-${String(currentMonthEndDate.getMonth() + 1).padStart(2, '0')}-${String(currentMonthEndDate.getDate()).padStart(2, '0')}`
-  const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
-  const nextMonthEndDate = new Date(nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1, 0)
-  const nextMonthStartISO = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`
-  const nextMonthEndISO = `${nextMonthEndDate.getFullYear()}-${String(nextMonthEndDate.getMonth() + 1).padStart(2, '0')}-${String(nextMonthEndDate.getDate()).padStart(2, '0')}`
-  const currentMonthLabel = `${today.getFullYear()}年${today.getMonth() + 1}月`
-  const nextMonthLabel = `${nextMonthDate.getFullYear()}年${nextMonthDate.getMonth() + 1}月`
 
   const monthlyIncome = settings.monthlyIncome ?? 0
-
-  // 今月の残り（today 〜 今月末）：信号色なし、情報表示用
-  const currentMonthRemaining = useMemo(
-    () =>
-      getDeficitForRange(
-        transactions,
-        billingGroups,
-        cards,
-        0,
-        todayISO,
-        currentMonthEndISO,
-        { evaluateSignal: false },
-      ),
-    [transactions, billingGroups, cards, todayISO, currentMonthEndISO],
-  )
-
-  // 翌月（カレンダー基準）：信号色あり、収入と比較
-  const deficit = useMemo(
-    () =>
-      getDeficitForRange(
-        transactions,
-        billingGroups,
-        cards,
-        monthlyIncome,
-        nextMonthStartISO,
-        nextMonthEndISO,
-        { evaluateSignal: true },
-      ),
-    [transactions, billingGroups, cards, monthlyIncome, nextMonthStartISO, nextMonthEndISO],
-  )
 
   const upcoming = useMemo(
     () => getUpcomingWithdrawals(transactions, billingGroups, cards, today),
@@ -111,8 +58,6 @@ export default function Dashboard() {
       total: list.reduce((s, t) => s + t.amount, 0),
     }
   }, [transactions])
-
-  const badge = statusBadge(deficit.status)
 
   // Sprint1: 現サイクルのカード利用累計
   const payDay =
@@ -183,9 +128,6 @@ export default function Dashboard() {
       ) + 1,
     )
   })()
-  const dailyAvg =
-    cycleLengthDays > 0 ? Math.round(currentCycleUsage / cycleLengthDays) : 0
-
   // v0.4.15 Stage3: サイクル進捗% (今日が現サイクルのどこにいるか)
   const cycleProgress = (() => {
     if (cycleLengthDays <= 0) return 0
@@ -267,7 +209,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="px-4 pt-6 pb-4 space-y-6">
+    <div className="px-4 pt-6 pb-4 space-y-4 lg:space-y-6">
+      {/* v0.4.16 Stage4: トップ2カラム（給料日 / 進行中サイクル） */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
       {/* v0.4.13 Stage1: 給料日カード（給料日までの収支見通し） */}
       <section className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
         <div className="flex items-start justify-between mb-3">
@@ -409,6 +354,8 @@ export default function Dashboard() {
         )}
       </section>
 
+      </div>{/* end トップ2カラム */}
+
       {/* v0.4.14 Stage2: 給料日までの引落リスト */}
       {upcomingByPayday.length > 0 && (
         <section className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
@@ -455,24 +402,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Sprint1: 現サイクルのカード利用累計 */}
-      <section className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
-        <p className="text-xs text-accent font-semibold">
-          現サイクル（{payCycles.current.start.slice(5).replace('-', '/')}〜
-          {payCycles.current.end.slice(5).replace('-', '/')}）で使用
-        </p>
-        <p className="text-3xl font-bold tracking-tight tabular-nums mt-1">
-          ¥{fmt(currentCycleUsage)}
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-          <div>
-            残り <span className="font-semibold tabular-nums">{remainingDays}</span> 日
-          </div>
-          <div>
-            日割平均 <span className="font-semibold tabular-nums">¥{fmt(dailyAvg)}</span>/日
-          </div>
-        </div>
-      </section>
+      {/* v0.4.16: 旧「現サイクル使用累計」は Stage3 進行中サイクルに統合 */}
 
       {/* 引落集中アラート */}
       {concentrationAlerts.length > 0 && (
@@ -500,59 +430,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* 引落予定（今月の残り + 翌月）— PCで横並び、スマホ縦折り返し */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* 今月の残り（信号色なし、情報表示） */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
-          <p className="text-xs text-gray-500">
-            {currentMonthLabel} の引落（残り）
-          </p>
-          <p className="text-[10px] text-gray-400">
-            {todayISO.slice(5).replace('-', '/')} 〜 {currentMonthEndISO.slice(5).replace('-', '/')}
-          </p>
-          <p className="text-3xl font-bold tracking-tight tabular-nums mt-2">
-            ¥{fmt(currentMonthRemaining.totalOut)}
-          </p>
-          <p className="text-xs text-gray-400 mt-2">
-            今日以降に着弾予定の合計
-          </p>
-        </div>
-
-        {/* 翌月（信号色あり、収入比較） */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
-          <div className="flex items-start justify-between">
-            <p className="text-xs text-gray-500">
-              {nextMonthLabel} の引落予定
-            </p>
-            <span
-              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
-            >
-              {badge.label}
-            </span>
-          </div>
-          <p className="text-3xl font-bold tracking-tight tabular-nums mt-2">
-            ¥{fmt(deficit.totalOut)}
-          </p>
-          <div className="mt-2 text-xs text-gray-500">
-            {monthlyIncome > 0 ? (
-              <>
-                収入 ¥{fmt(deficit.income)} −  ¥{fmt(deficit.totalOut)} ={' '}
-                <span
-                  className={`font-semibold tabular-nums ${
-                    deficit.balance < 0 ? 'text-danger' : 'text-accent'
-                  }`}
-                >
-                  {deficit.balance < 0 ? '−' : '+'}¥{fmt(Math.abs(deficit.balance))}
-                </span>
-              </>
-            ) : (
-              <Link to="/settings" className="text-accent underline">
-                月収を設定する
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
+      {/* v0.4.16: 旧「今月残り/翌月の引落予定」は Stage1 給料日カードに統合 */}
 
       {recordOnly.count > 0 && (
         <p className="text-xs text-gray-400">
