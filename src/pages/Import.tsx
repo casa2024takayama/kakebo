@@ -82,7 +82,20 @@ export default function Import() {
 
     if ((preset === 'saison' || preset === 'aeon') && saisonResult) {
       const cardId = matchedCardId || undefined
-      const stamped: Preview[] = toImport.map((t) => ({ ...t, cardId }))
+      // v0.4.11: 重複検出 - 既存と (date, amount, memo, cardId) が一致するレコードはスキップ
+      const existingKeys = new Set(
+        transactions
+          .filter((t) => (t.kind ?? 'individual') === 'individual')
+          .map((t) => `${t.date}|${t.amount}|${t.memo}|${t.cardId ?? ''}`),
+      )
+      const stamped: Preview[] = toImport
+        .map((t) => ({ ...t, cardId }))
+        .filter(
+          (t) =>
+            !existingKeys.has(
+              `${t.date}|${t.amount}|${t.memo}|${t.cardId ?? ''}`,
+            ),
+        )
       addTransactions(stamped)
 
       // 請求一括レコードの生成 + 重複制御

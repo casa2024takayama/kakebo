@@ -219,7 +219,7 @@ function extractSaisonByLabel(rows: string[][], labelRe: RegExp): string | null 
 }
 
 function parseDateLoose(raw: string): string | null {
-  const trimmed = raw.trim()
+  const trimmed = raw.trim().normalize('NFKC')
   // v0.4.7: YYMMDD 6桁圧縮形式（イオンCSV「260311」など）
   if (/^\d{6}$/.test(trimmed)) {
     const yy = trimmed.slice(0, 2)
@@ -231,14 +231,27 @@ function parseDateLoose(raw: string): string | null {
       return `20${yy}-${mm}-${dd}`
     }
   }
-  // 年/月/日表記。スペース除去（「2026年 5月 7日」→「2026/5/7」対応）
+  // v0.4.11: より堅牢な抽出。
+  // 年月日表記（半角・全角・スペース・記号混在）に対応するため、
+  // 文字列の中から「YYYY ?? MM ?? DD」という3つの数値ブロックを正規表現で抜き出す。
+  // 例: "2026年 5月 7日" / "2026/5/7" / "2026.05.07" / "2026年5月7日" 全てヒット
+  const m = trimmed.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/)
+  if (m) {
+    const [, y, mo, d] = m
+    const moNum = parseInt(mo, 10)
+    const dNum = parseInt(d, 10)
+    if (moNum >= 1 && moNum <= 12 && dNum >= 1 && dNum <= 31) {
+      return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
+    }
+  }
+  // 連続表記（YYYY/MM/DD、YYYY-MM-DDなど区切りつき）
   const cleaned = trimmed
     .replace(/[年月.]/g, '/')
     .replace(/日/g, '')
     .replace(/\s+/g, '')
   if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(cleaned)) {
-    const [y, m, d] = cleaned.split('/')
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    const [y, mo, d] = cleaned.split('/')
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
   }
   return parseDate(raw)
 }
