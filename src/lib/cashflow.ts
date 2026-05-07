@@ -14,8 +14,9 @@
  *   future:    未開始（今日 < start）
  */
 
-import type { BillingGroup, Card, Transaction } from '../types'
+import type { BillingGroup, Card, Transaction, DaySpec, PayDayShiftRule } from '../types'
 import { getAllWithdrawalsInRange, type WithdrawalEntry } from './withdrawalDate'
+import { getPayCycleForDate } from './payCycle'
 
 /** YYYY-MM-DD を Date(JST 0:00) に */
 function isoToDate(iso: string): Date {
@@ -54,10 +55,12 @@ export function classifyCycle(
 export type CashflowSummary = {
   /** 今日の口座残高（収入実額 − 今日までの引落） */
   todayBalance: number
-  /** 採用された収入額（実績 or 設定既定値） */
+  /** 採用された収入額（サイクル内 kind='income' の合計、Q1=D 厳格運用） */
   cycleIncome: number
-  /** 収入が実績（income transactions）由来か */
-  incomeIsActual: boolean
+  /** v0.4.32: 設定の月収（参考値として常に保持） */
+  settingsMonthlyIncome: number
+  /** 過去6サイクルの収入（直近順、新しいものから） */
+  pastCycleIncomes: { start: string; end: string; payDate: string; total: number }[]
   /** 次の引落（最も早い1件） null=なし */
   nextWithdrawal: WithdrawalEntry | null
   /** 明日以降〜給料日前日 の確定済引落合計 */
@@ -88,13 +91,15 @@ export function buildCashflowSummary(
   payCycleStart: string,
   payCycleEnd: string,
   today: Date = new Date(),
+  payDay: DaySpec = 15,
+  shiftRule: PayDayShiftRule = 'before',
 ): CashflowSummary {
   const todayISO = dateToISO(today)
   const payCycleEndDate = isoToDate(payCycleEnd)
 
-  // v0.4.27: 収入を「実績優先」に。
-  // 現サイクル内の income transaction があればその合計、なければ settings.monthlyIncome。
-  const cycleIncomeFromTx = transactions
+  // v0.4.32 (Q1=D): サイクル内 kind='income' の合計のみを採用。
+  // 設定値はフォールバックではなく「参考値」として別フィールドで保持。
+  const cycleIncome = transactions
     .filter(
       (t) =>
         t.kind === 'income' &&
@@ -102,10 +107,30 @@ export function buildCashflowSummary(
         t.date <= payCycleEnd,
     )
     .reduce((s, t) => s + t.amount, 0)
-  const incomeIsActual = cycleIncomeFromTx > 0
-  const cycleIncome = incomeIsActual
-    ? cycleIncomeFromTx
-    : Math.max(0, Math.floor(monthlyIncome || 0))
+  const settingsMonthlyIncome = Math.max(0, Math.floor(monthlyIncome || 0))
+
+  // v0.4.32: 過去6サイクルの収入履歴
+  const pastCycleIncomes: CashflowSummary['pastCycleIncomes'] = []
+  for (let offset = 1; offset <= 6; offset++) {
+    const refDate = new Date(today.getFullYear(), today.getMonth() - offset, 15)
+    const cycle = getPayCycleForDate(refDate, payDay, shiftRule)
+    const total = transactions
+      .filter(
+        (t) =>
+          t.kind === 'income' &&
+          t.date >= cycle.start &&
+          t.date <= cycle.end,
+      )
+      .reduce((s, t) => s + t.amount, 0)
+    if (total > 0) {
+      pastCycleIncomes.push({
+        start: cycle.start,
+        end: cycle.end,
+        payDate: cycle.payDate,
+        total,
+      })
+    }
+  }
 
   // 全引落（サイクル内）
   const cycleStartDate = isoToDate(payCycleStart)
@@ -151,7 +176,8 @@ export function buildCashflowSummary(
   return {
     todayBalance,
     cycleIncome,
-    incomeIsActual,
+    settingsMonthlyIncome,
+    pastCycleIncomes,
     nextWithdrawal,
     pendingTotal,
     pendingCount,

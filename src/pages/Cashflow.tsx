@@ -62,8 +62,10 @@ export default function Cashflow() {
         payCycles.current.start,
         payCycles.current.end,
         today,
+        payDay,
+        shiftRule,
       ),
-    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.start, payCycles.current.end, today],
+    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.start, payCycles.current.end, today, payDay, shiftRule],
   )
 
   // ===== Stage B: カレンダー =====
@@ -253,31 +255,63 @@ export default function Cashflow() {
                     <> · 引落済 −¥{fmt(summary.alreadyPaidTotal)}</>
                   )}
                 </p>
-                {!summary.incomeIsActual && (
-                  <Link
-                    to="/add"
-                    className="text-[10px] text-accent/80 underline mt-1 inline-block"
-                  >
-                    実額を「収入」で記録（推奨）
-                  </Link>
-                )}
-                {summary.incomeIsActual && (
-                  <span className="text-[10px] text-accent/80 mt-1 inline-block">
-                    ✓ 今月の実収入 ¥{fmt(summary.cycleIncome)}
-                  </span>
-                )}
+                <div className="mt-2 space-y-0.5">
+                  <div className="flex items-center justify-between text-[11px] tabular-nums">
+                    <span className="text-accent/80">✓ 今サイクルの実収入</span>
+                    <span className="text-accent font-semibold">
+                      ¥{fmt(summary.cycleIncome)}
+                    </span>
+                  </div>
+                  {summary.settingsMonthlyIncome > 0 && (
+                    <div className="flex items-center justify-between text-[10px] tabular-nums text-gray-400">
+                      <span>設定値（参考）</span>
+                      <span>¥{fmt(summary.settingsMonthlyIncome)}</span>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
-              <p className="text-xs text-gray-500 mt-2">
-                <Link to="/add" className="text-accent underline">
-                  入力画面で「収入」を記録
-                </Link>
-                するか、
-                <Link to="/settings" className="text-accent underline ml-1">
-                  月収を設定
-                </Link>
-                すると残高見通しが表示されます。
-              </p>
+              <>
+                <p className="text-3xl md:text-[36px] font-bold tabular-nums tracking-tight mt-1 text-gray-400">
+                  ¥0
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  今サイクルに収入記録がありません。
+                  <br />
+                  <Link to="/add" className="text-accent underline">
+                    入力で「収入」を記録
+                  </Link>
+                  するか、CSVから取り込んでください。
+                </p>
+                {summary.settingsMonthlyIncome > 0 && (
+                  <p className="text-[10px] text-gray-400 mt-1 tabular-nums">
+                    設定値（参考）¥{fmt(summary.settingsMonthlyIncome)}
+                  </p>
+                )}
+              </>
+            )}
+
+            {/* v0.4.32: 過去サイクルの収入履歴 */}
+            {summary.pastCycleIncomes.length > 0 && (
+              <details className="mt-3 group">
+                <summary className="text-[10px] text-gray-500 cursor-pointer select-none hover:text-gray-700">
+                  過去サイクルの収入 ({summary.pastCycleIncomes.length})
+                </summary>
+                <ul className="mt-1.5 space-y-0.5 text-[10px] tabular-nums">
+                  {summary.pastCycleIncomes.map((c) => (
+                    <li
+                      key={c.start}
+                      className="flex items-center justify-between text-gray-500"
+                    >
+                      <span>
+                        {c.start.slice(5).replace('-', '/')}〜
+                        {c.end.slice(5).replace('-', '/')}
+                      </span>
+                      <span>¥{fmt(c.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
           </div>
 
