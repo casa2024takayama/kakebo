@@ -420,8 +420,10 @@ function classifyMizuhoRow(
     { kw: /\bjcb\b|ジェーシービー|ｼﾞｪｰｼｰﾋﾞｰ/i, key: 'JCB' },
     { kw: /nicos|ニコス|ｼｪﾙ|シェル/i, key: 'ニコス' },
     { kw: /楽天.*(カ.?[\-ー－]?ド|card)|rakuten.*card|ｶﾞｸﾃﾝ/i, key: '楽天' },
-    // ビューカード（kana/kanji 揺れ吸収: ビュー / ビユー / ﾋﾞｭｰ / view）
-    { kw: /(ビュー|ビユー|ﾋﾞｭｰ|view).*(カ.?[\-ー－]?ド|ｶ.?[\-ー]?ﾄﾞ|card)/i, key: 'ビュー' },
+    // v0.4.31: ビューカード表記揺れを完全吸収
+    // 対応: ビューカード / ビユーカード / ビュ-カ-ド / ビユ-カ-ド / ﾋﾞｭｰｶｰﾄﾞ / view card
+    // NFKC正規化後に「－」(全角ハイフン) は「-」になるため、長音記号と半角ハイフン両方を許容
+    { kw: /ビ[ュユ][ー\-].*カ[ー\-]?ド|view.*card/i, key: 'ビュー' },
     { kw: /jal.*(カ.?[\-ー－]?ド|card)/i, key: 'JAL' },
     { kw: /j-?west|west.*card/i, key: 'J-WEST' },
     { kw: /出光|ｲﾃﾞﾐﾂ|apollo/i, key: 'apollostation' },
