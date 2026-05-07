@@ -5,10 +5,11 @@ import { useStore } from '../store'
 import {
   getUpcomingWithdrawals,
   getConcentrationAlerts,
-  getDeficitForRange,
 } from '../lib/forecast'
 import { getCurrentAndNextCycles } from '../lib/payCycle'
 import { getAllWithdrawalsInRange, computeDerivedDates } from '../lib/withdrawalDate'
+import { buildCashflowSummary } from '../lib/cashflow'
+import { storage } from '../lib/storage'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -176,23 +177,46 @@ export default function Dashboard() {
     0,
   )
 
-  // v0.4.13 Stage1: 給料日カード用の計算
-  // 「今日〜給料日(=現サイクル末)までの引落合計」と「入金前の残高」を出す
-  const payDateISO = payCycles.current.end // 給料日 = 現サイクル末日（実装上）
-  const balanceBeforePayday = useMemo(
+  // v0.4.34: 給料日カードを Cashflow と同じ buildCashflowSummary に統一
+  // → 銀行残高スナップショットと整合した数値が表示される
+  const payDateISO = payCycles.current.end
+  const bankSnapshots = useMemo(() => storage.getBankSnapshots(), [transactions])
+  const cashflowSummary = useMemo(
     () =>
-      getDeficitForRange(
+      buildCashflowSummary(
         transactions,
-        billingGroups,
         cards,
+        billingGroups,
         monthlyIncome,
-        todayISO,
-        payDateISO,
-        { evaluateSignal: true },
+        payCycles.current.start,
+        payCycles.current.end,
+        today,
+        payDay,
+        shiftRule,
+        bankSnapshots,
       ),
-    [transactions, billingGroups, cards, monthlyIncome, todayISO, payDateISO],
+    [
+      transactions,
+      cards,
+      billingGroups,
+      monthlyIncome,
+      payCycles.current.start,
+      payCycles.current.end,
+      today,
+      payDay,
+      shiftRule,
+      bankSnapshots,
+    ],
   )
-  const remainingBalance = monthlyIncome - balanceBeforePayday.totalOut
+  // 互換用エイリアス（旧コードが balanceBeforePayday.totalOut を参照）
+  const balanceBeforePayday = {
+    totalOut: cashflowSummary.pendingTotal,
+    income: cashflowSummary.cycleIncome,
+    balance: cashflowSummary.beforePaydayBalance,
+    status: cashflowSummary.safety === 'danger' ? 'red' : cashflowSummary.safety === 'warn' ? 'yellow' : 'green',
+  }
+  const todayBalance = cashflowSummary.todayBalance
+  const remainingBalance = cashflowSummary.beforePaydayBalance
   const isPositive = remainingBalance >= 0
 
   // v0.4.19: 件数は upcomingByPayday（取引ベース）から正確に算出
@@ -263,15 +287,20 @@ export default function Dashboard() {
           )}
         </div>
 
-        {monthlyIncome > 0 ? (
+        {(cashflowSummary.snapshot || cashflowSummary.cycleIncome > 0 || monthlyIncome > 0) ? (
           <div className="grid grid-cols-3 gap-2 items-end">
             <div>
               <p className="text-[10px] text-gray-500 uppercase tracking-wide">
                 今日の残高
               </p>
               <p className="text-xl md:text-2xl font-bold tabular-nums tracking-tight mt-1">
-                ¥{fmt(monthlyIncome)}
+                ¥{fmt(todayBalance)}
               </p>
+              {cashflowSummary.snapshot && (
+                <p className="text-[9px] text-blue-600 mt-0.5">
+                  📊 {cashflowSummary.snapshot.date} 同期
+                </p>
+              )}
             </div>
             <div className="relative">
               <p className="text-[10px] text-gray-500 uppercase tracking-wide">

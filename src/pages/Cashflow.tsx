@@ -613,15 +613,27 @@ export default function Cashflow() {
                 </p>
               </div>
 
-              {/* 給料日タグ */}
-              {selectedDayEvent?.isPayDay && (
-                <div className="bg-[#e6efe8] text-[#3d6e4a] rounded-lg px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-xs font-semibold">給料日</span>
-                  <span className="text-base font-bold tabular-nums">
-                    +¥{fmt(monthlyIncome)}
-                  </span>
-                </div>
-              )}
+              {/* 給料日タグ（v0.4.34: 実額優先） */}
+              {selectedDayEvent?.isPayDay && (() => {
+                const actualOnDay = transactions
+                  .filter((t) => t.kind === 'income' && t.date === selectedDate)
+                  .reduce((s, t) => s + t.amount, 0)
+                const dispYen = actualOnDay > 0 ? actualOnDay : monthlyIncome
+                const isActual = actualOnDay > 0
+                return (
+                  <div className="bg-[#e6efe8] text-[#3d6e4a] rounded-lg px-3 py-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">給料日</span>
+                      <span className="text-base font-bold tabular-nums">
+                        +¥{fmt(dispYen)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#3d6e4a]/70 mt-0.5">
+                      {isActual ? '実入金（CSV/手動入力より）' : '想定値（設定の月収より）'}
+                    </p>
+                  </div>
+                )
+              })()}
 
               {/* 引落リスト（カード別、関連取引は表示しない） */}
               {selectedDayEvent && selectedDayEvent.withdrawals.length > 0 ? (
