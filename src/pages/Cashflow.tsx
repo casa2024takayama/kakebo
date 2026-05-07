@@ -1,15 +1,19 @@
 /**
- * v0.4.23 Cashflow画面（3ペインレイアウト）— Stage A
+ * v0.4.23 Cashflow画面（3ペインレイアウト）— Stage A+B
  *
  * design-reference/design_handoff_kakebo_cashflow に基づく実装。
- * Stage A では左ペイン4ブロックのみ実装。中央・右はプレースホルダ。
+ * - Stage A: 左ペイン4ブロック
+ * - Stage B: 中央ペイン カレンダー（給料日タグ・引落ドット・推移残高）
+ * - Stage C: 右ペイン プレースホルダ（次回実装）
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../store'
-import { getCurrentAndNextCycles } from '../lib/payCycle'
+import { getCurrentAndNextCycles, getPayCycleForDate } from '../lib/payCycle'
 import { buildCashflowSummary } from '../lib/cashflow'
+import { getAllWithdrawalsInRange } from '../lib/withdrawalDate'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -59,6 +63,102 @@ export default function Cashflow() {
       ),
     [transactions, cards, billingGroups, monthlyIncome, payCycles.current.end, today],
   )
+
+  // ===== Stage B: カレンダー =====
+  const [monthOffset, setMonthOffset] = useState(0)
+  const calendarMonth = useMemo(() => {
+    const d = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1)
+    return { year: d.getFullYear(), month0: d.getMonth() }
+  }, [today, monthOffset])
+
+  // 月のセル42個（6行×7列、日曜始まり）
+  const calendarCells = useMemo(() => {
+    const { year, month0 } = calendarMonth
+    const firstDay = new Date(year, month0, 1)
+    const startDow = firstDay.getDay() // 0=日
+    const cells: { date: Date; inMonth: boolean; iso: string }[] = []
+    const start = new Date(year, month0, 1 - startDow)
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+      cells.push({
+        date: d,
+        inMonth: d.getMonth() === month0,
+        iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      })
+    }
+    return cells
+  }, [calendarMonth])
+
+  // 月内のイベント（引落 + 給料日）
+  const monthEvents = useMemo(() => {
+    const { year, month0 } = calendarMonth
+    const monthStart = new Date(year, month0, 1)
+    const monthEnd = new Date(year, month0 + 1, 0)
+    const withdrawals = getAllWithdrawalsInRange(
+      transactions,
+      cards,
+      billingGroups,
+      monthStart,
+      monthEnd,
+    )
+    // 給料日: その月の給料日サイクルの「次の給料日」を取得
+    const payCycle = getPayCycleForDate(monthStart, payDay, shiftRule)
+    const payDateInMonth: string[] = []
+    if (payCycle.payDate.startsWith(`${year}-${String(month0 + 1).padStart(2, '0')}`)) {
+      payDateInMonth.push(payCycle.payDate)
+    }
+    // 月内に給料日が複数（前後サイクル）あり得るケース: 翌月分も範囲なら追加
+    const nextPay = getPayCycleForDate(
+      new Date(year, month0 + 1, 1),
+      payDay,
+      shiftRule,
+    )
+    if (
+      nextPay.payDate.startsWith(`${year}-${String(month0 + 1).padStart(2, '0')}`) &&
+      !payDateInMonth.includes(nextPay.payDate)
+    ) {
+      payDateInMonth.push(nextPay.payDate)
+    }
+    // セル日付別にイベントをまとめる
+    const byDate = new Map<
+      string,
+      { withdrawals: typeof withdrawals; isPayDay: boolean }
+    >()
+    for (const w of withdrawals) {
+      const e = byDate.get(w.withdrawalDate) ?? { withdrawals: [], isPayDay: false }
+      e.withdrawals.push(w)
+      byDate.set(w.withdrawalDate, e)
+    }
+    for (const pd of payDateInMonth) {
+      const e = byDate.get(pd) ?? { withdrawals: [], isPayDay: false }
+      e.isPayDay = true
+      byDate.set(pd, e)
+    }
+    return byDate
+  }, [calendarMonth, transactions, cards, billingGroups, payDay, shiftRule])
+
+  // 推移残高（今日以降のセルに表示）
+  const todayISOStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const runningBalance = useMemo(() => {
+    const map = new Map<string, number>()
+    let bal = monthlyIncome
+    // 今日からカレンダー末日までのセルを順に
+    for (const cell of calendarCells) {
+      if (cell.iso < todayISOStr) continue
+      const e = monthEvents.get(cell.iso)
+      if (e) {
+        for (const w of e.withdrawals) bal -= w.total
+        if (e.isPayDay) bal += monthlyIncome
+      }
+      map.set(cell.iso, bal)
+    }
+    return map
+  }, [calendarCells, monthEvents, monthlyIncome, todayISOStr])
+
+  const cardColorOfId = (cardId: string): string => {
+    if (!cardId) return '#7a6d5e'
+    return cards.find((c) => c.id === cardId)?.color ?? '#7a6d5e'
+  }
 
   const cardNameOf = (cardId: string): string => {
     if (!cardId) return '非カード取引'
@@ -207,9 +307,137 @@ export default function Cashflow() {
           </div>
         </aside>
 
-        {/* 中央ペイン：プレースホルダ（Stage Bで実装） */}
-        <section className="bg-bg2 rounded-2xl p-5 min-h-[400px] flex items-center justify-center text-gray-400 text-sm border border-dashed border-gray-300">
-          中央：カレンダー（Stage B で実装予定）
+        {/* 中央ペイン：カレンダー */}
+        <section className="bg-[#f7f4ed] dark:bg-gray-900 rounded-2xl p-4 lg:p-5">
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold tabular-nums">
+              {calendarMonth.year}年 {calendarMonth.month0 + 1}月
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setMonthOffset((v) => v - 1)}
+                className="p-1.5 rounded hover:bg-white/60 text-gray-600"
+                aria-label="前の月"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={() => setMonthOffset(0)}
+                className="px-2 py-1 text-xs rounded hover:bg-white/60 text-gray-600"
+              >
+                今月
+              </button>
+              <button
+                onClick={() => setMonthOffset((v) => v + 1)}
+                className="p-1.5 rounded hover:bg-white/60 text-gray-600"
+                aria-label="次の月"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* 曜日ヘッダー */}
+          <div className="grid grid-cols-7 gap-px text-[10px] font-bold tracking-[0.1em] uppercase mb-1">
+            {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
+              <div
+                key={d}
+                className={`text-center py-1 ${
+                  i === 0
+                    ? 'text-[#9d3a4a]'
+                    : i === 6
+                    ? 'text-[#3a6989]'
+                    : 'text-gray-500'
+                }`}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* カレンダー本体 */}
+          <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden">
+            {calendarCells.map((cell) => {
+              const isToday = cell.iso === todayISOStr
+              const event = monthEvents.get(cell.iso)
+              const balance = runningBalance.get(cell.iso)
+              const dow = cell.date.getDay()
+              return (
+                <div
+                  key={cell.iso}
+                  className={`bg-white dark:bg-gray-800 p-1.5 min-h-[68px] lg:min-h-[76px] relative text-[11px] ${
+                    cell.inMonth ? '' : 'opacity-40'
+                  }`}
+                >
+                  {/* 日付 */}
+                  <div className="flex items-start justify-between">
+                    <span
+                      className={`tabular-nums ${
+                        isToday
+                          ? 'bg-[#b87333] text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold'
+                          : dow === 0
+                          ? 'text-[#9d3a4a]'
+                          : dow === 6
+                          ? 'text-[#3a6989]'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {cell.date.getDate()}
+                    </span>
+                    {isToday && (
+                      <span className="text-[8px] font-bold tracking-wider text-[#b87333]">
+                        TODAY
+                      </span>
+                    )}
+                  </div>
+
+                  {/* イベント */}
+                  <div className="mt-0.5 space-y-0.5">
+                    {event?.isPayDay && (
+                      <div className="bg-[#e6efe8] text-[#3d6e4a] text-[9px] font-semibold px-1 py-0.5 rounded tabular-nums">
+                        +¥{(monthlyIncome / 10000).toFixed(0)}万
+                      </div>
+                    )}
+                    {event?.withdrawals.slice(0, 2).map((w, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1 text-[9px] tabular-nums"
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: cardColorOfId(w.cardId) }}
+                        />
+                        <span className="text-[#9d3a4a] font-semibold truncate">
+                          −¥{w.total >= 10000 ? `${(w.total / 10000).toFixed(1)}万` : fmt(w.total)}
+                        </span>
+                      </div>
+                    ))}
+                    {event && event.withdrawals.length > 2 && (
+                      <p className="text-[8px] text-gray-400">
+                        +{event.withdrawals.length - 2}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 推移残高（イベントがあるセルのみ） */}
+                  {balance !== undefined && (event?.isPayDay || (event && event.withdrawals.length > 0)) && (
+                    <p className="absolute bottom-1 right-1.5 text-[8px] text-[#c9beac] tabular-nums">
+                      {balance >= 10000
+                        ? `${(balance / 10000).toFixed(0)}万`
+                        : balance < 0
+                        ? `−${fmt(Math.abs(balance))}`
+                        : fmt(balance)}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-[10px] text-gray-400 mt-2">
+            ドット = 引落（カードカラー） / 緑タグ = 給料日 / 右下 = 推移残高
+          </p>
         </section>
 
         {/* 右ペイン：プレースホルダ（Stage Cで実装） */}
