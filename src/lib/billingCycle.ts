@@ -111,12 +111,13 @@ export function getCycleForTransaction(
     }
   }
 
-  // 引落 = 締め月の翌月の withdrawalDay（土日は翌営業日へ）
+  // v0.4.21: 引落月オフセットを使用（既定1=翌月、シェル等は0=当月）
+  const offset = group.withdrawalMonthOffset ?? 1
   let wY = cycleEndY
-  let wM0 = cycleEndM0 + 1
-  if (wM0 > 11) {
-    wM0 = 0
-    wY = cycleEndY + 1
+  let wM0 = cycleEndM0 + offset
+  while (wM0 > 11) {
+    wM0 -= 12
+    wY += 1
   }
   const wDay = clampDay(wY, wM0, group.withdrawalDay)
   const shifted = shiftToNextBusinessDay(wY, wM0, wDay)
@@ -150,12 +151,13 @@ export function getCycleByWithdrawalDate(
   group: BillingGroup,
 ): { cycleStart: string; cycleEnd: string; withdrawalDate: string } {
   const { y, m0 } = parseISO(actualWithdrawalDate)
-  // 締め月 = 引落月 - 1
+  // v0.4.21: 締め月 = 引落月 - withdrawalMonthOffset
+  const offset = group.withdrawalMonthOffset ?? 1
   let closeY = y
-  let closeM0 = m0 - 1
-  if (closeM0 < 0) {
-    closeM0 = 11
-    closeY = y - 1
+  let closeM0 = m0 - offset
+  while (closeM0 < 0) {
+    closeM0 += 12
+    closeY -= 1
   }
   const cycleEndD = clampDay(closeY, closeM0, group.closingDay)
   // サイクル開始 = 締め月の前月 closingDay + 1

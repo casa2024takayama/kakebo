@@ -95,6 +95,12 @@ export type BillingGroup = {
   withdrawalDay: DaySpec
   /** 引落口座の表示用ラベル（任意） */
   withdrawalAccount?: string
+  /**
+   * v0.4.21: 引落月のオフセット（締め月から何ヶ月後に引き落とすか）。
+   * 多くは 1（翌月）。シェル/ニコス系の一部カードは 0（当月）。
+   * 未設定なら 1 とみなす（既存データ互換）。
+   */
+  withdrawalMonthOffset?: number
 }
 
 /** カード（請求グループに所属） */

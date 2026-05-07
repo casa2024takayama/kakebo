@@ -62,11 +62,12 @@ export const CARD_MASTERS: CardMaster[] = [
     notes: '26日以降利用は翌々月扱い',
   },
   {
-    name: 'apollostation',
-    issuer: '出光クレジット',
-    closingDay: 10,
-    withdrawalDay: 7,
-    withdrawalMonthOffset: 1,
+    name: 'ニコス（旧シェル）',
+    issuer: 'ニコス',
+    closingDay: 5,
+    withdrawalDay: 27,
+    withdrawalMonthOffset: 0,
+    notes: '当月27日引落（締め月と同月）',
   },
   {
     name: 'J-WEST',

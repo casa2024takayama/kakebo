@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { storage, runMigrationV03, runMigrationV048 } from '../lib/storage'
+import { storage, runMigrationV03, runMigrationV048, runMigrationV0421 } from '../lib/storage'
 import type { TimelineFilter } from '../lib/storage'
 import { currentMonthKey } from '../lib/budget'
 
@@ -23,6 +23,12 @@ if (migrationResult.hasBulkRecords && !storage.getWarnedMixedDates()) {
 const fixedBulks = runMigrationV048()
 if (fixedBulks > 0) {
   console.log(`[v0.4.8 migration] ${fixedBulks} bulk record(s) repaired with actualWithdrawalDate`)
+}
+
+// v0.4.21: 旧apollostation → ニコス（旧シェル）に補正
+const fixedApollo = runMigrationV0421()
+if (fixedApollo > 0) {
+  console.log(`[v0.4.21 migration] ${fixedApollo} apollostation group(s) renamed to ニコス（旧シェル）`)
 }
 import type {
   Category,

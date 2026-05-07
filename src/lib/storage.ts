@@ -25,6 +25,8 @@ const KEYS = {
   importLog: 'kakebo_import_log',
   /** v0.4.8: bulkレコードに actualWithdrawalDate 補完 */
   migrationV048: 'kakebo_migration_v0_4_8',
+  /** v0.4.21: 旧apollostationグループをニコス（旧シェル）に補正 */
+  migrationV0421: 'kakebo_migration_v0_4_21',
 }
 
 export type ImportLogEntry = {
@@ -145,6 +147,41 @@ export function runMigrationV048(): number {
   })
   if (fixed > 0) save(KEYS.transactions, next)
   save(KEYS.migrationV048, '1')
+  return fixed
+}
+
+/**
+ * v0.4.21 マイグレーション:
+ * 旧apollostation（出光クレジット 10締め/翌月7日引落）グループは
+ * 実は旧シェルカードでニコス系列（5締め/当月27日引落）。
+ * - name='apollostation'
+ * - closingDay=10 かつ withdrawalDay=7 のもの（ユーザーが手動編集していない場合）
+ * を検出して自動補正。
+ */
+export function runMigrationV0421(): number {
+  const done = load<string>(KEYS.migrationV0421, '')
+  if (done === '1') return 0
+  const groups = load<BillingGroup[]>(KEYS.billingGroups, [])
+  let fixed = 0
+  const next = groups.map((g) => {
+    if (
+      g.name === 'apollostation' &&
+      g.closingDay === 10 &&
+      g.withdrawalDay === 7
+    ) {
+      fixed += 1
+      return {
+        ...g,
+        name: 'ニコス（旧シェル）',
+        closingDay: 5 as const,
+        withdrawalDay: 27 as const,
+        withdrawalMonthOffset: 0,
+      }
+    }
+    return g
+  })
+  if (fixed > 0) save(KEYS.billingGroups, next)
+  save(KEYS.migrationV0421, '1')
   return fixed
 }
 

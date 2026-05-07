@@ -23,6 +23,7 @@ function GroupHeader({ group }: { group: BillingGroup }) {
   const [closing, setClosing] = useState(daySpecToInput(group.closingDay))
   const [withdraw, setWithdraw] = useState(daySpecToInput(group.withdrawalDay))
   const [account, setAccount] = useState(group.withdrawalAccount ?? '')
+  const [offset, setOffset] = useState<number>(group.withdrawalMonthOffset ?? 1)
 
   const groupCardCount = cards.filter((c) => c.billingGroupId === group.id).length
 
@@ -34,9 +35,13 @@ function GroupHeader({ group }: { group: BillingGroup }) {
       closingDay: inputToDaySpec(closing),
       withdrawalDay: inputToDaySpec(withdraw),
       withdrawalAccount: account || undefined,
+      withdrawalMonthOffset: offset,
     })
     setEditing(false)
   }
+
+  const offsetLabel = (n: number): string =>
+    n === 0 ? '当月' : n === 1 ? '翌月' : n === 2 ? '翌々月' : `${n}ヶ月後`
 
   const handleDelete = () => {
     const msg =
@@ -63,7 +68,8 @@ function GroupHeader({ group }: { group: BillingGroup }) {
         </div>
         <p className="text-xs text-gray-500 mt-1">
           {group.closingDay === 'last' ? '末日' : `${group.closingDay}日`}締め /
-          翌月{group.withdrawalDay === 'last' ? '末日' : `${group.withdrawalDay}日`}引落
+          {offsetLabel(group.withdrawalMonthOffset ?? 1)}
+          {group.withdrawalDay === 'last' ? '末日' : `${group.withdrawalDay}日`}引落
           {group.withdrawalAccount ? ` / ${group.withdrawalAccount}` : ''}
         </p>
       </div>
@@ -91,7 +97,7 @@ function GroupHeader({ group }: { group: BillingGroup }) {
           />
         </label>
         <label className="text-xs text-gray-600">
-          引落日（翌月）
+          引落日
           <input
             value={withdraw}
             onChange={(e) => setWithdraw(e.target.value)}
@@ -100,6 +106,18 @@ function GroupHeader({ group }: { group: BillingGroup }) {
           />
         </label>
       </div>
+      <label className="text-xs text-gray-600 block">
+        引落月
+        <select
+          value={offset}
+          onChange={(e) => setOffset(parseInt(e.target.value, 10))}
+          className="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+        >
+          <option value={0}>当月（締め月と同じ）</option>
+          <option value={1}>翌月（一般的）</option>
+          <option value={2}>翌々月</option>
+        </select>
+      </label>
       <label className="text-xs text-gray-600 block">
         引落口座（任意）
         <input
@@ -258,6 +276,7 @@ function MasterPickerModal({
       name: m.name,
       closingDay: m.closingDay,
       withdrawalDay: m.withdrawalDay,
+      withdrawalMonthOffset: m.withdrawalMonthOffset,
     })
     addCard({ name: m.name, billingGroupId: groupId })
     onClose()
@@ -285,7 +304,12 @@ function MasterPickerModal({
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
                 {m.closingDay === 'last' ? '末日' : `${m.closingDay}日`}締め /
-                翌月{m.withdrawalDay === 'last' ? '末日' : `${m.withdrawalDay}日`}引落
+                {m.withdrawalMonthOffset === 0
+                  ? '当月'
+                  : m.withdrawalMonthOffset === 2
+                  ? '翌々月'
+                  : '翌月'}
+                {m.withdrawalDay === 'last' ? '末日' : `${m.withdrawalDay}日`}引落
                 {m.notes ? ` · ${m.notes}` : ''}
               </div>
             </button>
