@@ -1,13 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { Upload, Check, AlertCircle, History, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
-import { parseCsv, parseSaisonCsv, matchCardByName, type SaisonParseResult } from '../lib/csv'
+import {
+  parseCsv,
+  parseSaisonCsv,
+  parseMizuhoCsv,
+  matchCardByName,
+  type SaisonParseResult,
+  type MizuhoRow,
+} from '../lib/csv'
 import { getCycleForTransaction } from '../lib/billingCycle'
 import { storage, type ImportLogEntry } from '../lib/storage'
 import type { Transaction } from '../types'
 
 type Preview = Omit<Transaction, 'id'>
-type Preset = 'generic' | 'saison' | 'aeon'
+type Preset = 'generic' | 'saison' | 'aeon' | 'mizuho'
 
 export default function Import() {
   const {
@@ -31,6 +38,12 @@ export default function Import() {
   const [saisonResult, setSaisonResult] = useState<SaisonParseResult | null>(null)
   const [matchedCardId, setMatchedCardId] = useState<string>('')
   const [createBulkRecord, setCreateBulkRecord] = useState(true)
+
+  // v0.4.28: みずほ銀行CSVプリセット
+  const [mizuhoRows, setMizuhoRows] = useState<MizuhoRow[]>([])
+  // 行ごとに「取込ON/OFF」と「カテゴリ上書き」を管理
+  const [mizuhoSelected, setMizuhoSelected] = useState<Set<string>>(new Set())
+  const [mizuhoCategoryOverride, setMizuhoCategoryOverride] = useState<Record<string, string>>({})
   const [fileName, setFileName] = useState<string>('')
   const [logs, setLogs] = useState<ImportLogEntry[]>([])
   const [showLog, setShowLog] = useState(false)
@@ -48,6 +61,9 @@ export default function Import() {
     setDone(false)
     setPreviews([])
     setSaisonResult(null)
+    setMizuhoRows([])
+    setMizuhoSelected(new Set())
+    setMizuhoCategoryOverride({})
     setFileName(file.name)
     try {
       if (preset === 'saison' || preset === 'aeon') {
@@ -59,6 +75,29 @@ export default function Import() {
         setMatchedCardId(m?.id ?? '')
         setPreviews(r.details)
         setSelected(new Set(r.details.map((_, i) => i)))
+      } else if (preset === 'mizuho') {
+        const r = await parseMizuhoCsv(file)
+        setMizuhoRows(r.rows)
+        // 既存トランザクションとの重複検出: cardBilling のうち
+        // 同じ日に同じカード会社の bulk が存在する場合は OFF（C3: カード+日付一致で判定）
+        const existingBulkKeys = new Set(
+          transactions
+            .filter((t) => t.kind === 'bulk' && t.cardId)
+            .map((t) => {
+              const cardName = cards.find((c) => c.id === t.cardId)?.name ?? ''
+              return `${t.actualWithdrawalDate ?? t.date}|${cardName}`
+            }),
+        )
+        const initSelected = new Set<string>()
+        for (const row of r.rows) {
+          if (row.classification === 'cardBilling' && row.cardKeyword) {
+            const matched = matchCardByName(row.cardKeyword, cards)
+            const dedupKey = matched ? `${row.date}|${matched.name}` : ''
+            if (existingBulkKeys.has(dedupKey)) continue // 重複→OFF
+          }
+          initSelected.add(row.id)
+        }
+        setMizuhoSelected(initSelected)
       } else {
         const rows = await parseCsv(file, rules)
         setPreviews(rows)
@@ -185,6 +224,55 @@ export default function Import() {
           bulkCreated = true
         }
       }
+    } else if (preset === 'mizuho') {
+      // v0.4.28: みずほ銀行CSV取込
+      // 選択された行のみを Transaction に変換して追加
+      const otherCatId = categories.find((c) => c.id === 'other')?.id ?? categories[0]?.id ?? 'other'
+      const toAdd: Preview[] = []
+      for (const row of mizuhoRows) {
+        if (!mizuhoSelected.has(row.id)) continue
+        // cardBilling は通常スキップ（既に bulk で計上）。ユーザーが明示的に選択した場合のみ追加。
+        const memoPrefix =
+          row.classification === 'paypayCharge'
+            ? '[PayPayチャージ]'
+            : row.classification === 'atmWithdraw'
+            ? '[現金引出]'
+            : row.classification === 'income'
+            ? '[入金]'
+            : row.classification === 'cardBilling'
+            ? `[${row.cardKeyword ?? 'カード'}引落]`
+            : ''
+        const memo = memoPrefix ? `${memoPrefix} ${row.description}`.trim() : row.description
+        const categoryId = mizuhoCategoryOverride[row.id] ?? otherCatId
+        if (row.classification === 'income') {
+          toAdd.push({
+            amount: row.amount,
+            categoryId: '',
+            memo,
+            date: row.date,
+            source: 'csv',
+            kind: 'income',
+          })
+        } else {
+          // 出金系 → 非カード個別取引
+          toAdd.push({
+            amount: row.amount,
+            categoryId,
+            memo,
+            date: row.date,
+            source: 'csv',
+            kind: 'individual',
+          })
+        }
+      }
+      // 重複検出（既存 transactions と同じ memo+date+amount は除外）
+      const existingKeys = new Set(
+        transactions.map((t) => `${t.date}|${t.amount}|${t.memo}`),
+      )
+      const deduped = toAdd.filter(
+        (t) => !existingKeys.has(`${t.date}|${t.amount}|${t.memo}`),
+      )
+      addTransactions(deduped)
     } else {
       addTransactions(toImport)
     }
@@ -239,6 +327,7 @@ export default function Import() {
           <option value="generic">汎用（金額・日付列を自動検出）</option>
           <option value="saison">セゾン（明細CSV）</option>
           <option value="aeon">イオン（明細CSV）</option>
+          <option value="mizuho">みずほ銀行（口座取引CSV）</option>
         </select>
       </div>
 
@@ -324,6 +413,105 @@ export default function Import() {
             />
             請求一括レコードも作成して、明細を「記録のみ」に切替（案3：重複防止）
           </label>
+        </div>
+      )}
+
+      {/* v0.4.28: みずほ銀行プレビュー */}
+      {preset === 'mizuho' && mizuhoRows.length > 0 && (
+        <div className="space-y-2 mb-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">
+              {mizuhoRows.length}件 · {mizuhoSelected.size}件取込
+              {mizuhoRows.length - mizuhoSelected.size > 0 &&
+                ` · ${mizuhoRows.length - mizuhoSelected.size}件スキップ`}
+            </span>
+            <button
+              onClick={() =>
+                setMizuhoSelected(
+                  mizuhoSelected.size === mizuhoRows.length
+                    ? new Set()
+                    : new Set(mizuhoRows.map((r) => r.id)),
+                )
+              }
+              className="text-xs text-accent"
+            >
+              {mizuhoSelected.size === mizuhoRows.length ? '全解除' : '全選択'}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            ・<span className="text-amber-600">カード引落</span> は既存bulk(同日同カード)あれば自動OFF<br />
+            ・<span className="text-accent">給与/入金</span> は収入として登録<br />
+            ・<span className="text-blue-600">PayPayチャージ</span> ・ <span className="text-purple-600">ATM引出</span> ・ その他は非カード個別取引
+          </p>
+
+          {mizuhoRows.map((r) => {
+            const isSel = mizuhoSelected.has(r.id)
+            const badge =
+              r.classification === 'cardBilling'
+                ? { label: 'カード引落', color: 'bg-amber-100 text-amber-700' }
+                : r.classification === 'paypayCharge'
+                ? { label: 'PayPay', color: 'bg-blue-100 text-blue-700' }
+                : r.classification === 'income'
+                ? { label: '入金/給与', color: 'bg-accent/10 text-accent' }
+                : r.classification === 'atmWithdraw'
+                ? { label: 'ATM引出', color: 'bg-purple-100 text-purple-700' }
+                : { label: 'その他', color: 'bg-gray-100 text-gray-600' }
+            return (
+              <div
+                key={r.id}
+                className={`bg-white rounded-lg px-3 py-2 shadow-sm border-2 transition-colors ${
+                  isSel ? 'border-accent/30' : 'border-transparent opacity-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isSel}
+                    onChange={() => {
+                      const next = new Set(mizuhoSelected)
+                      isSel ? next.delete(r.id) : next.add(r.id)
+                      setMizuhoSelected(next)
+                    }}
+                    className="accent-accent flex-shrink-0"
+                  />
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${badge.color}`}
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="text-xs flex-1 truncate">{r.description}</span>
+                  <span
+                    className={`text-sm font-semibold tabular-nums flex-shrink-0 ${
+                      r.isOutgoing ? '' : 'text-accent'
+                    }`}
+                  >
+                    {r.isOutgoing ? '−' : '+'}¥{r.amount.toLocaleString('ja-JP')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 pl-6 text-[10px] text-gray-400 tabular-nums">
+                  <span>{r.date}</span>
+                  {r.classification !== 'cardBilling' && r.classification !== 'income' && (
+                    <select
+                      value={mizuhoCategoryOverride[r.id] ?? 'other'}
+                      onChange={(e) =>
+                        setMizuhoCategoryOverride({
+                          ...mizuhoCategoryOverride,
+                          [r.id]: e.target.value,
+                        })
+                      }
+                      className="ml-auto text-[10px] border border-gray-200 rounded px-1 bg-white"
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -427,7 +615,13 @@ export default function Import() {
                       </span>
                     </div>
                     <div className="text-gray-500 mt-1">
-                      {log.preset === 'saison' ? 'セゾン' : log.preset === 'aeon' ? 'イオン' : '汎用'}
+                      {log.preset === 'saison'
+                        ? 'セゾン'
+                        : log.preset === 'aeon'
+                        ? 'イオン'
+                        : log.preset === 'mizuho'
+                        ? 'みずほ銀行'
+                        : '汎用'}
                       {log.cardName ? ` · ${log.cardName}` : ''}
                       {' · '}明細{log.detailsCount}件
                       {log.skippedCount > 0 ? ` (${log.skippedCount}件除外)` : ''}
@@ -457,20 +651,26 @@ export default function Import() {
         )}
       </div>
 
-      {/* sticky な実行バー: 明細あり OR セゾン一括作成可能（previews=0でも合計>0 + カード割当ありなら表示） */}
+      {/* sticky な実行バー: 明細あり OR セゾン一括作成可能 OR みずほ */}
       {(previews.length > 0 ||
         ((preset === 'saison' || preset === 'aeon') &&
           saisonResult &&
           createBulkRecord &&
           matchedCardId &&
-          saisonResult.totalBilled > 0)) && (
+          saisonResult.totalBilled > 0) ||
+        (preset === 'mizuho' && mizuhoRows.length > 0)) && (
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md lg:max-w-6xl px-4 pointer-events-none z-40">
           <button
             onClick={handleImport}
-            disabled={previews.length > 0 && selected.size === 0}
+            disabled={
+              (previews.length > 0 && selected.size === 0) ||
+              (preset === 'mizuho' && mizuhoSelected.size === 0)
+            }
             className="pointer-events-auto w-full bg-accent text-white rounded-xl py-3.5 font-semibold disabled:opacity-40 shadow-lg"
           >
-            {previews.length > 0
+            {preset === 'mizuho'
+              ? `${mizuhoSelected.size}件をインポート（みずほ銀行）`
+              : previews.length > 0
               ? `${selected.size}件をインポート`
               : `請求一括¥${(saisonResult?.totalBilled ?? 0).toLocaleString('ja-JP')}を登録`}
           </button>

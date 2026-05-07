@@ -33,7 +33,7 @@ export type ImportLogEntry = {
   /** ISO timestamp */
   ts: string
   /** プリセット名 */
-  preset: 'generic' | 'saison' | 'aeon'
+  preset: 'generic' | 'saison' | 'aeon' | 'mizuho'
   /** 元ファイル名 */
   fileName: string
   /** カード名（セゾンのみ） */

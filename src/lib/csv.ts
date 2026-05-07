@@ -363,3 +363,155 @@ export async function parseSaisonCsv(
   return { cardName, withdrawalDate, totalBilled, details }
 }
 
+// ===== v0.4.28: みずほ銀行CSVプリセット =====
+
+export type MizuhoClassification =
+  | 'cardBilling'   // カード会社引落（既存bulkとの重複チェック対象）
+  | 'paypayCharge'  // PayPayチャージ
+  | 'income'        // 給与・振込入金
+  | 'atmWithdraw'   // ATM引出
+  | 'other'         // 公共料金・振込・その他
+
+export type MizuhoRow = {
+  /** 明細通番（CSV由来、重複インポート防止のキーとして使用可） */
+  id: string
+  /** 取引日 YYYY-MM-DD */
+  date: string
+  /** 出金=true（口座から減）、入金=false（口座に増） */
+  isOutgoing: boolean
+  /** 金額（常に正） */
+  amount: number
+  /** お取引内容（摘要） */
+  description: string
+  classification: MizuhoClassification
+  /** cardBilling 時のマッチしたカード名キーワード */
+  cardKeyword?: string
+}
+
+export type MizuhoParseResult = {
+  rows: MizuhoRow[]
+  startDate: string
+  endDate: string
+}
+
+function classifyMizuhoRow(
+  description: string,
+  isOutgoing: boolean,
+): { classification: MizuhoClassification; cardKeyword?: string } {
+  const desc = description.normalize('NFKC').toLowerCase()
+
+  // 入金は基本的に給与/振込として扱う
+  if (!isOutgoing) {
+    if (/給与|賞与|ボーナス|salary|ライズ|ｵﾌｲｽ|会社/i.test(desc)) {
+      return { classification: 'income' }
+    }
+    return { classification: 'income' } // とりあえず入金は全部 income 扱い（後で再分類可）
+  }
+
+  // 出金: カード会社の引落（dedup対象）
+  const cardKeywords: { kw: RegExp; key: string }[] = [
+    { kw: /paypay.*カード|paypay.*ｶｰﾄﾞ|ペイペイ.*カード/i, key: 'PayPay' },
+    { kw: /セゾン|saison|ｾｿﾞﾝ/i, key: 'セゾン' },
+    { kw: /イオン.*ファイナンシャル|aeon|ｲｵﾝ/i, key: 'イオン' },
+    { kw: /jcb/i, key: 'JCB' },
+    { kw: /nicos|ニコス|ｼｪﾙ|シェル/i, key: 'ニコス' },
+    { kw: /楽天.*カード|rakuten.*card|ｶﾞｸﾃﾝ/i, key: '楽天' },
+    { kw: /ビュー.*カード|view.*card|ｭﾞｭ.|ﾋﾞｭｰ/i, key: 'ビュー' },
+    { kw: /jal.*カード|jal.*card/i, key: 'JAL' },
+    { kw: /j-?west|west.*card/i, key: 'J-WEST' },
+    { kw: /出光|ｲﾃﾞﾐﾂ|apollo/i, key: 'apollostation' },
+  ]
+  for (const { kw, key } of cardKeywords) {
+    if (kw.test(desc)) return { classification: 'cardBilling', cardKeyword: key }
+  }
+
+  // PayPayチャージ（カード請求ではない PAYPAY 文字列）
+  if (/paypay|ペイペイ|ﾍﾟｲﾍﾟｲ/i.test(desc)) {
+    return { classification: 'paypayCharge' }
+  }
+
+  // ATM引出
+  if (/^atm|atm\(|ｴｲﾃｲｴﾑ/i.test(desc)) {
+    return { classification: 'atmWithdraw' }
+  }
+
+  return { classification: 'other' }
+}
+
+/**
+ * みずほ銀行CSVを取込。
+ *
+ * 想定フォーマット（取引明細CSV）:
+ *   - 1〜11行目: メタデータ（支店名・口座番号・期間・件数等）
+ *   - 12行目: 空行
+ *   - 13行目: ヘッダ「明細通番,日付,お引出金額,お預入金額,残高,お取引内容」
+ *   - 14行目以降: 明細
+ *   - 末尾に注釈行が含まれる可能性あり（数字でない行はスキップ）
+ *
+ * 文字コード: Shift_JIS（自動判定）
+ * 日付: YYYY.MM.DD
+ */
+export async function parseMizuhoCsv(file: File): Promise<MizuhoParseResult> {
+  const text = await readFileAsText(file)
+  const parsed = Papa.parse<string[]>(text, { skipEmptyLines: false })
+  const rows = parsed.data as string[][]
+
+  // ヘッダ行を探す
+  let detailStart = -1
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    const row = rows[i] ?? []
+    const first = (row[0] ?? '').trim()
+    const second = (row[1] ?? '').trim()
+    if (first === '明細通番' && /日付/.test(second)) {
+      detailStart = i + 1
+      break
+    }
+  }
+  if (detailStart === -1) {
+    throw new Error('みずほ銀行CSVのヘッダ行（明細通番,日付,...）が見つかりません')
+  }
+
+  // 期間情報（任意）
+  let startDate = ''
+  let endDate = ''
+  for (let i = 0; i < detailStart; i++) {
+    const row = rows[i] ?? []
+    const lbl = (row[0] ?? '').trim()
+    const val = (row[1] ?? '').trim()
+    if (/開始/.test(lbl) && val) startDate = parseDateLoose(val) ?? ''
+    if (/終了/.test(lbl) && val) endDate = parseDateLoose(val) ?? ''
+  }
+
+  const out: MizuhoRow[] = []
+  for (let i = detailStart; i < rows.length; i++) {
+    const row = rows[i]
+    if (!row) continue
+    const id = (row[0] ?? '').trim()
+    if (!id || !/^\d/.test(id)) continue // 明細通番が数字で始まらない行はスキップ（注釈等）
+    const dateRaw = (row[1] ?? '').trim()
+    const debit = parseAmount((row[2] ?? '').trim())
+    const credit = parseAmount((row[3] ?? '').trim())
+    const description = (row[5] ?? '').trim()
+    const date = parseDateLoose(dateRaw)
+    if (date === null) continue
+
+    const isOutgoing = Number.isFinite(debit) && debit > 0
+    const amount = isOutgoing ? debit : Number.isFinite(credit) ? credit : 0
+    if (amount <= 0) continue
+
+    const cls = classifyMizuhoRow(description, isOutgoing)
+
+    out.push({
+      id,
+      date,
+      isOutgoing,
+      amount,
+      description,
+      classification: cls.classification,
+      cardKeyword: cls.cardKeyword,
+    })
+  }
+
+  return { rows: out, startDate, endDate }
+}
+
