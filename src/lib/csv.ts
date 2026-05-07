@@ -406,22 +406,23 @@ function classifyMizuhoRow(
   }
 
   // 出金: カード会社の引落（dedup対象）
-  // v0.4.29: 「ジェーシービー」(カタカナJCB)、「イオンフイナンシヤル」表記揺れに対応
+  // v0.4.30:
+  // - ビューカード/ビユーカード/ﾋﾞｭｰｶｰﾄﾞ 等の表記揺れ
+  // - PAYPAYカード/PAYPAYカ-ド/PAYPAYｶｰﾄﾞ 等の表記揺れ（NFKC後の各種ハイフン）
   const cardKeywords: { kw: RegExp; key: string }[] = [
-    { kw: /paypay.*カード|paypay.*ｶｰﾄﾞ|ペイペイ.*カード/i, key: 'PayPay' },
+    // PayPayカード（カードを含む場合のみ。単独「PAYPAY」は別分類）
+    { kw: /(paypay|ﾍﾟｲﾍﾟｲ|ペイペイ).*(カ.?[\-ー－]?ド|ｶ.?[\-ー]?ﾄﾞ)/i, key: 'PayPay' },
     { kw: /セゾン|saison|ｾｿﾞﾝ/i, key: 'セゾン' },
-    // 「イオンファイナンシャル」「イオンフイナンシヤル」「イオンフィナンシャル」等を
-    // 表記揺れごと包括: 「イオン」+「ファ?イ?ナン」を含むもの
     {
       kw: /イオン.{0,3}(ファ?イ?ナン|ﾌｧ?ｲ?ﾅﾝ)|aeon\s*financ/i,
       key: 'イオン',
     },
-    // JCB: 英字 / 全角・半角カタカナ「ジェーシービー」「ｼﾞｪｰｼｰﾋﾞｰ」
     { kw: /\bjcb\b|ジェーシービー|ｼﾞｪｰｼｰﾋﾞｰ/i, key: 'JCB' },
     { kw: /nicos|ニコス|ｼｪﾙ|シェル/i, key: 'ニコス' },
-    { kw: /楽天.*カード|rakuten.*card|ｶﾞｸﾃﾝ/i, key: '楽天' },
-    { kw: /ビュー.*カード|view.*card|ﾋﾞｭｰ.*ｶｰﾄﾞ/i, key: 'ビュー' },
-    { kw: /jal.*カード|jal.*card/i, key: 'JAL' },
+    { kw: /楽天.*(カ.?[\-ー－]?ド|card)|rakuten.*card|ｶﾞｸﾃﾝ/i, key: '楽天' },
+    // ビューカード（kana/kanji 揺れ吸収: ビュー / ビユー / ﾋﾞｭｰ / view）
+    { kw: /(ビュー|ビユー|ﾋﾞｭｰ|view).*(カ.?[\-ー－]?ド|ｶ.?[\-ー]?ﾄﾞ|card)/i, key: 'ビュー' },
+    { kw: /jal.*(カ.?[\-ー－]?ド|card)/i, key: 'JAL' },
     { kw: /j-?west|west.*card/i, key: 'J-WEST' },
     { kw: /出光|ｲﾃﾞﾐﾂ|apollo/i, key: 'apollostation' },
   ]

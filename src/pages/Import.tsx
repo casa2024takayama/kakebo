@@ -234,7 +234,7 @@ export default function Import() {
         // cardBilling は通常スキップ（既に bulk で計上）。ユーザーが明示的に選択した場合のみ追加。
         const memoPrefix =
           row.classification === 'paypayCharge'
-            ? '[PayPayチャージ]'
+            ? '[PayPay引落]'
             : row.classification === 'atmWithdraw'
             ? '[現金引出]'
             : row.classification === 'income'
@@ -441,7 +441,7 @@ export default function Import() {
           <p className="text-[11px] text-gray-400 leading-relaxed">
             ・<span className="text-amber-600">カード引落</span> は既存bulk(同日同カード)あれば自動OFF<br />
             ・<span className="text-accent">給与/入金</span> は収入として登録<br />
-            ・<span className="text-blue-600">PayPayチャージ</span> ・ <span className="text-purple-600">ATM引出</span> ・ その他は非カード個別取引
+            ・<span className="text-blue-600">PayPay引落</span> ・ <span className="text-purple-600">ATM引出</span> ・ その他は非カード個別取引
           </p>
 
           {mizuhoRows.map((r) => {
@@ -450,7 +450,7 @@ export default function Import() {
               r.classification === 'cardBilling'
                 ? { label: 'カード引落', color: 'bg-amber-100 text-amber-700' }
                 : r.classification === 'paypayCharge'
-                ? { label: 'PayPay', color: 'bg-blue-100 text-blue-700' }
+                ? { label: 'PayPay引落', color: 'bg-blue-100 text-blue-700' }
                 : r.classification === 'income'
                 ? { label: '入金/給与', color: 'bg-accent/10 text-accent' }
                 : r.classification === 'atmWithdraw'

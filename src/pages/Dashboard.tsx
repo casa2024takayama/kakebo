@@ -75,11 +75,13 @@ export default function Dashboard() {
     let total = 0
     for (const t of transactions) {
       if (t.excludeFromWithdrawal) continue
-      // v0.4.19: 非カード取引も含める（社長指示）
+      if (t.kind === 'income') continue // v0.4.30: 収入は除外
+      // v0.4.30: 進行中サイクル =「次の給料日サイクル末に引かれる予定」=未来の負担
       // - カード: billingPeriodが現サイクルと重なる AND 引落日が現サイクル末より後
-      // - 非カード: 利用日が現サイクル内（=その日に出た出費）
+      //   （カードは利用後に引落があるので、利用日が過去でも未来引落として扱う）
+      // - 非カード: 利用日=引落日。past=既に引かれたお金。**今日以降のみ**を未来扱い
       if (!t.cardId) {
-        if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+        if (t.date > todayISO && t.date <= payCycles.current.end) {
           total += t.amount
         }
         continue
@@ -94,7 +96,7 @@ export default function Dashboard() {
       total += t.amount
     }
     return total
-  }, [transactions, payCycles, billingGroups, cards])
+  }, [transactions, payCycles, billingGroups, cards, todayISO])
 
   // v0.4.19: 非カード取引の進行中サイクル集計（カード別バーの下に表示）
   const currentCycleNonCard = useMemo(() => {
@@ -102,14 +104,16 @@ export default function Dashboard() {
     let total = 0
     for (const t of transactions) {
       if (t.excludeFromWithdrawal) continue
+      if (t.kind === 'income') continue // v0.4.30: 収入は除外
       if (t.cardId) continue
-      if (t.date >= payCycles.current.start && t.date <= payCycles.current.end) {
+      // v0.4.30: 過去の非カード取引（既に引かれた）は未来予測に含めない
+      if (t.date > todayISO && t.date <= payCycles.current.end) {
         count += 1
         total += t.amount
       }
     }
     return { count, total }
-  }, [transactions, payCycles])
+  }, [transactions, payCycles, todayISO])
 
   // v0.4.15 Stage3: 進行中サイクルのカード別利用累計
   const currentCycleUsageByCard = useMemo(() => {
