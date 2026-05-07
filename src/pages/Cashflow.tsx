@@ -35,6 +35,7 @@ export default function Cashflow() {
     transactions,
     cards,
     billingGroups,
+    categories,
     settings,
   } = useStore()
 
@@ -158,6 +159,42 @@ export default function Cashflow() {
   const cardColorOfId = (cardId: string): string => {
     if (!cardId) return '#7a6d5e'
     return cards.find((c) => c.id === cardId)?.color ?? '#7a6d5e'
+  }
+
+  // ===== Stage C: 右ペイン 確定済請求リスト =====
+  const [billSort, setBillSort] = useState<'date' | 'amount'>('date')
+
+  // 今日以降の引落予定すべて（最大90日先まで）
+  const pendingBills = useMemo(() => {
+    const horizon = new Date(today)
+    horizon.setDate(horizon.getDate() + 90)
+    const list = getAllWithdrawalsInRange(
+      transactions,
+      cards,
+      billingGroups,
+      today,
+      horizon,
+    ).filter((w) => w.withdrawalDate >= todayISOStr)
+    if (billSort === 'amount') {
+      return [...list].sort((a, b) => b.total - a.total)
+    }
+    return list
+  }, [transactions, cards, billingGroups, today, todayISOStr, billSort])
+
+  function daysUntil(iso: string): number {
+    const [y, m, d] = iso.split('-').map(Number)
+    const target = new Date(y, m - 1, d)
+    const ms = target.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    return Math.max(0, Math.round(ms / 86400000))
+  }
+
+  function progressOfCycle(iso: { cycleStart: string; cycleEnd: string; withdrawalDate: string }): number {
+    const start = new Date(iso.cycleStart).getTime()
+    const end = new Date(iso.withdrawalDate).getTime()
+    const now = today.getTime()
+    if (end <= start) return 100
+    const ratio = ((now - start) / (end - start)) * 100
+    return Math.max(0, Math.min(100, Math.round(ratio)))
   }
 
   const cardNameOf = (cardId: string): string => {
@@ -440,9 +477,127 @@ export default function Cashflow() {
           </p>
         </section>
 
-        {/* 右ペイン：プレースホルダ（Stage Cで実装） */}
-        <aside className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 min-h-[400px] flex items-center justify-center text-gray-400 text-sm border border-gray-100 dark:border-gray-700">
-          右：確定済請求リスト（Stage C で実装予定）
+        {/* 右ペイン：確定済請求リスト */}
+        <aside className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">
+              確定済 · 引落待ち
+              <span className="text-xs text-gray-400 font-normal ml-1">
+                {pendingBills.length}件
+              </span>
+            </h2>
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-md p-0.5 text-[11px]">
+              <button
+                onClick={() => setBillSort('date')}
+                className={`px-2 py-0.5 rounded ${
+                  billSort === 'date'
+                    ? 'bg-[#b87333] text-white font-semibold'
+                    : 'text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                日付順
+              </button>
+              <button
+                onClick={() => setBillSort('amount')}
+                className={`px-2 py-0.5 rounded ${
+                  billSort === 'amount'
+                    ? 'bg-[#b87333] text-white font-semibold'
+                    : 'text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                金額順
+              </button>
+            </div>
+          </div>
+
+          {pendingBills.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-8">
+              確定済の引落予定はありません
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {pendingBills.map((w) => {
+                const days = daysUntil(w.withdrawalDate)
+                const isUrgent = days <= 7
+                const color = cardColorOfId(w.cardId)
+                const progress = progressOfCycle({
+                  cycleStart: w.cycleStart,
+                  cycleEnd: w.cycleEnd,
+                  withdrawalDate: w.withdrawalDate,
+                })
+                const cardName = w.cardId
+                  ? cards.find((c) => c.id === w.cardId)?.name ?? '—'
+                  : (() => {
+                      const t = w.transactions[0]
+                      const cat = t
+                        ? categories.find((c) => c.id === t.categoryId)?.name ?? ''
+                        : ''
+                      return t?.memo || cat || '非カード'
+                    })()
+                return (
+                  <li
+                    key={`${w.cardId || 'cash'}|${w.withdrawalDate}|${w.transactions[0]?.id ?? ''}`}
+                    className="border border-gray-200 dark:border-gray-700 rounded-md p-3.5"
+                  >
+                    {/* 上段: ブランドバッジ + カード名 + 残日数 */}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-xs font-medium truncate flex-1">
+                        {cardName}
+                      </span>
+                      <span
+                        className={`text-[10px] tabular-nums font-semibold flex-shrink-0 ${
+                          isUrgent ? 'text-[#9d3a4a]' : 'text-gray-500'
+                        }`}
+                      >
+                        あと{days}日
+                      </span>
+                    </div>
+
+                    {/* 中段: 大きな金額 + 件数 */}
+                    <div className="flex items-end justify-between mt-2">
+                      <span className="text-[22px] font-bold tabular-nums tracking-tight">
+                        ¥{fmt(w.total)}
+                      </span>
+                      <span className="text-[10px] text-gray-400 mb-1">
+                        {w.transactions.length}件
+                      </span>
+                    </div>
+
+                    {/* 下段: 進捗バー + 日付 */}
+                    <div className="mt-2.5">
+                      <div className="h-1 bg-[#f0e8d8] rounded-full overflow-hidden relative">
+                        <div
+                          className="h-full transition-all"
+                          style={{
+                            width: `${progress}%`,
+                            backgroundColor: color,
+                          }}
+                        />
+                        <span
+                          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border-2 border-white"
+                          style={{
+                            left: `calc(${progress}% - 5px)`,
+                            backgroundColor: color,
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1.5 text-[9px] text-gray-400 tabular-nums">
+                        <span>{formatMD(w.cycleStart)}</span>
+                        <span>{formatMD(w.cycleEnd)}締め</span>
+                        <span className="font-semibold" style={{ color }}>
+                          {formatMD(w.withdrawalDate)}引落
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </aside>
       </div>
     </div>
