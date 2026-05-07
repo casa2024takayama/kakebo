@@ -7,9 +7,9 @@
  * - Stage C: 右ペイン プレースホルダ（次回実装）
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react'
 import { useStore } from '../store'
 import { getCurrentAndNextCycles, getPayCycleForDate } from '../lib/payCycle'
 import { buildCashflowSummary } from '../lib/cashflow'
@@ -163,6 +163,22 @@ export default function Cashflow() {
 
   // ===== Stage C: 右ペイン 確定済請求リスト =====
   const [billSort, setBillSort] = useState<'date' | 'amount'>('date')
+
+  // ===== Stage D: カレンダーセル選択 → 右ペイン詳細表示 =====
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // Esc で選択解除
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedDate) {
+        setSelectedDate(null)
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedDate])
+
+  const selectedDayEvent = selectedDate ? monthEvents.get(selectedDate) : undefined
 
   // 今日以降の引落予定すべて（最大90日先まで）
   const pendingBills = useMemo(() => {
@@ -400,12 +416,22 @@ export default function Cashflow() {
               const event = monthEvents.get(cell.iso)
               const balance = runningBalance.get(cell.iso)
               const dow = cell.date.getDay()
+              const hasEvent = !!event && (event.isPayDay || event.withdrawals.length > 0)
+              const isSelected = selectedDate === cell.iso
               return (
                 <div
                   key={cell.iso}
-                  className={`bg-white dark:bg-gray-800 p-1.5 min-h-[68px] lg:min-h-[76px] relative text-[11px] ${
+                  onClick={hasEvent ? () => setSelectedDate(isSelected ? null : cell.iso) : undefined}
+                  className={`bg-white dark:bg-gray-800 p-1.5 min-h-[68px] lg:min-h-[76px] relative text-[11px] transition-all ${
                     cell.inMonth ? '' : 'opacity-40'
+                  } ${
+                    hasEvent ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-gray-700' : ''
+                  } ${
+                    isSelected ? 'ring-2 ring-[#b87333] ring-inset bg-amber-50 dark:bg-gray-700' : ''
                   }`}
+                  role={hasEvent ? 'button' : undefined}
+                  aria-pressed={hasEvent ? isSelected : undefined}
+                  aria-label={hasEvent ? `${cell.date.getMonth() + 1}月${cell.date.getDate()}日 詳細を表示` : undefined}
                 >
                   {/* 日付 */}
                   <div className="flex items-start justify-between">
@@ -477,8 +503,106 @@ export default function Cashflow() {
           </p>
         </section>
 
-        {/* 右ペイン：確定済請求リスト */}
+        {/* 右ペイン：確定済請求リスト or 日別詳細 */}
         <aside className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 space-y-3">
+          {selectedDate ? (
+            // 日別詳細ビュー
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setSelectedDate(null)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-accent"
+                >
+                  <ArrowLeft size={14} /> 一覧に戻る
+                </button>
+                <span className="text-[10px] text-gray-400">Esc で閉じる</span>
+              </div>
+              <div className="border-b border-gray-100 dark:border-gray-700 pb-3">
+                <p className="text-[10px] tracking-[0.12em] uppercase text-gray-500 font-bold">
+                  {dayOfWeekLabel(selectedDate)}曜日
+                </p>
+                <p className="text-3xl font-bold tabular-nums tracking-tight mt-1">
+                  {parseInt(selectedDate.split('-')[1], 10)}/
+                  {parseInt(selectedDate.split('-')[2], 10)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
+                  {selectedDate}
+                </p>
+              </div>
+
+              {/* 給料日タグ */}
+              {selectedDayEvent?.isPayDay && (
+                <div className="bg-[#e6efe8] text-[#3d6e4a] rounded-lg px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold">給料日</span>
+                  <span className="text-base font-bold tabular-nums">
+                    +¥{fmt(monthlyIncome)}
+                  </span>
+                </div>
+              )}
+
+              {/* 引落リスト（カード別、関連取引は表示しない） */}
+              {selectedDayEvent && selectedDayEvent.withdrawals.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-gray-500">
+                    引落
+                  </p>
+                  <ul className="space-y-2">
+                    {selectedDayEvent.withdrawals.map((w, i) => {
+                      const cardName = w.cardId
+                        ? cards.find((c) => c.id === w.cardId)?.name ?? '—'
+                        : (() => {
+                            const t = w.transactions[0]
+                            const cat = t
+                              ? categories.find((c) => c.id === t.categoryId)?.name ?? ''
+                              : ''
+                            return t?.memo || cat || '非カード'
+                          })()
+                      return (
+                        <li
+                          key={i}
+                          className="border border-gray-200 dark:border-gray-700 rounded-md p-3"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: cardColorOfId(w.cardId) }}
+                            />
+                            <span className="text-xs font-medium truncate flex-1">
+                              {cardName}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              {w.transactions.length}件
+                            </span>
+                          </div>
+                          <p
+                            className="text-xl font-bold tabular-nums tracking-tight mt-1.5"
+                            style={{ color: cardColorOfId(w.cardId) }}
+                          >
+                            −¥{fmt(w.total)}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
+                            請求期間 {formatMD(w.cycleStart)}〜{formatMD(w.cycleEnd)}
+                          </p>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <div className="border-t border-gray-100 dark:border-gray-700 pt-2 flex items-center justify-between text-xs">
+                    <span className="text-gray-500">合計</span>
+                    <span className="font-bold tabular-nums text-danger">
+                      −¥{fmt(selectedDayEvent.withdrawals.reduce((s, w) => s + w.total, 0))}
+                    </span>
+                  </div>
+                </div>
+              ) : selectedDayEvent?.isPayDay ? null : (
+                <p className="text-xs text-gray-400 text-center py-6">
+                  この日のイベントはありません
+                </p>
+              )}
+            </>
+          ) : (
+            // 通常の確定済リスト
+            <>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">
               確定済 · 引落待ち
@@ -597,6 +721,8 @@ export default function Cashflow() {
                 )
               })}
             </ul>
+          )}
+            </>
           )}
         </aside>
       </div>
