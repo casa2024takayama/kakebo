@@ -108,9 +108,31 @@ export function getAllWithdrawalsInRange(
   const endISO = dateToISO(endDate)
   const map = new Map<string, WithdrawalEntry>()
 
+  // v0.4.36: bulkカバレッジ自動検出
+  // 各bulk(cardId付き)の cycle期間内の個別取引は、bulkで代表されるため自動スキップ。
+  // excludeFromWithdrawal フラグが何らかの理由で立っていない場合の安全網。
+  const bulkCoverage = new Map<string, Array<{ start: string; end: string }>>()
+  for (const t of transactions) {
+    if (t.kind !== 'bulk') continue
+    if (t.excludeFromWithdrawal) continue
+    if (!t.cardId) continue
+    const d = computeDerivedDates(t, groups, cards)
+    if (!d) continue
+    const arr = bulkCoverage.get(t.cardId) ?? []
+    arr.push({ start: d.cycleStart, end: d.cycleEnd })
+    bulkCoverage.set(t.cardId, arr)
+  }
+
   for (const t of transactions) {
     if (t.excludeFromWithdrawal) continue
     if (t.kind === 'income') continue // v0.4.29: 収入は引落集計に含めない
+    // v0.4.36: bulkに覆われた個別取引はスキップ（フラグ漏れの安全網）
+    if (t.kind !== 'bulk' && t.cardId) {
+      const periods = bulkCoverage.get(t.cardId)
+      if (periods?.some((p) => t.date >= p.start && t.date <= p.end)) {
+        continue
+      }
+    }
     const derived = computeDerivedDates(t, groups, cards)
     if (!derived) continue
     if (!isoBetween(derived.withdrawalDate, startISO, endISO)) continue
