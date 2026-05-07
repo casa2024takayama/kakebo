@@ -5,7 +5,7 @@ import { useStore } from '../store'
 import { readReceipt } from '../lib/ai'
 import { getCycleForTransaction } from '../lib/billingCycle'
 
-type Mode = 'individual' | 'bulk'
+type Mode = 'individual' | 'bulk' | 'income'
 
 export default function AddTransaction() {
   const navigate = useNavigate()
@@ -37,6 +37,29 @@ export default function AddTransaction() {
     new Date().toISOString().slice(0, 7),
   )
   const [bulkAmount, setBulkAmount] = useState('')
+
+  // v0.4.27: 収入フォーム（給料等、月変動データ）
+  const [incomeAmount, setIncomeAmount] = useState('')
+  const [incomeDate, setIncomeDate] = useState(new Date().toISOString().slice(0, 10))
+  const [incomeMemo, setIncomeMemo] = useState('給料')
+
+  const handleIncomeSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const n = Number(incomeAmount)
+    if (!n || n <= 0) {
+      setError('金額を入力してください')
+      return
+    }
+    addTransaction({
+      amount: n,
+      categoryId: '', // 収入はカテゴリ不要
+      memo: incomeMemo || '給料',
+      date: incomeDate,
+      source: 'manual',
+      kind: 'income',
+    })
+    navigate('/')
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -179,7 +202,7 @@ export default function AddTransaction() {
       <div className="flex gap-2 mb-6 bg-gray-100 rounded-xl p-1">
         <button
           onClick={() => setMode('individual')}
-          className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold ${
             mode === 'individual' ? 'bg-white shadow-sm' : 'text-gray-500'
           }`}
         >
@@ -187,11 +210,19 @@ export default function AddTransaction() {
         </button>
         <button
           onClick={() => setMode('bulk')}
-          className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold ${
             mode === 'bulk' ? 'bg-white shadow-sm' : 'text-gray-500'
           }`}
         >
           請求一括
+        </button>
+        <button
+          onClick={() => setMode('income')}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold ${
+            mode === 'income' ? 'bg-white shadow-sm text-accent' : 'text-gray-500'
+          }`}
+        >
+          収入
         </button>
       </div>
 
@@ -354,6 +385,57 @@ export default function AddTransaction() {
             className="w-full bg-accent text-white rounded-xl py-3.5 font-semibold text-base mt-2 active:opacity-80"
           >
             請求一括を登録
+          </button>
+        </form>
+      )}
+
+      {/* v0.4.27: 収入フォーム（給料等、月変動データ） */}
+      {mode === 'income' && (
+        <form onSubmit={handleIncomeSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">入金額（円）</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={incomeAmount}
+              onChange={(e) => setIncomeAmount(e.target.value)}
+              placeholder="0"
+              className="w-full text-3xl font-bold border-b-2 border-gray-300 focus:border-accent outline-none py-2 bg-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">入金日</label>
+            <input
+              type="date"
+              value={incomeDate}
+              onChange={(e) => setIncomeDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-accent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">メモ</label>
+            <input
+              type="text"
+              value={incomeMemo}
+              onChange={(e) => setIncomeMemo(e.target.value)}
+              placeholder="給料 / ボーナス / 副収入 等"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-accent outline-none"
+            />
+          </div>
+
+          {error && <p className="text-danger text-sm">{error}</p>}
+
+          <p className="text-xs text-gray-400">
+            設定の「月収」より、ここで記録した実額が優先されます。
+          </p>
+
+          <button
+            type="submit"
+            className="w-full bg-accent text-white rounded-xl py-3.5 font-semibold text-base mt-2 active:opacity-80"
+          >
+            収入を登録
           </button>
         </form>
       )}

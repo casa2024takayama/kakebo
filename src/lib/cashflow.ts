@@ -52,14 +52,20 @@ export function classifyCycle(
 }
 
 export type CashflowSummary = {
-  /** 今日の口座残高（=月収を流用） */
+  /** 今日の口座残高（収入実額 − 今日までの引落） */
   todayBalance: number
+  /** 採用された収入額（実績 or 設定既定値） */
+  cycleIncome: number
+  /** 収入が実績（income transactions）由来か */
+  incomeIsActual: boolean
   /** 次の引落（最も早い1件） null=なし */
   nextWithdrawal: WithdrawalEntry | null
-  /** 今日〜給料日前日 の確定済引落合計 */
+  /** 明日以降〜給料日前日 の確定済引落合計 */
   pendingTotal: number
   /** 同範囲のエントリ件数 */
   pendingCount: number
+  /** 今日含む過去の引落合計（既に口座から出た） */
+  alreadyPaidTotal: number
   /** 給料日前日の残高見通し */
   beforePaydayBalance: number
   /** 安全判定 */
@@ -79,36 +85,58 @@ export function buildCashflowSummary(
   cards: Card[],
   groups: BillingGroup[],
   monthlyIncome: number,
+  payCycleStart: string,
   payCycleEnd: string,
   today: Date = new Date(),
 ): CashflowSummary {
   const todayISO = dateToISO(today)
-  const todayBalance = Math.max(0, Math.floor(monthlyIncome || 0))
-
-  // 給料日前日まで（cycleEnd を含む）
   const payCycleEndDate = isoToDate(payCycleEnd)
-  const allInRange = getAllWithdrawalsInRange(
+
+  // v0.4.27: 収入を「実績優先」に。
+  // 現サイクル内の income transaction があればその合計、なければ settings.monthlyIncome。
+  const cycleIncomeFromTx = transactions
+    .filter(
+      (t) =>
+        t.kind === 'income' &&
+        t.date >= payCycleStart &&
+        t.date <= payCycleEnd,
+    )
+    .reduce((s, t) => s + t.amount, 0)
+  const incomeIsActual = cycleIncomeFromTx > 0
+  const cycleIncome = incomeIsActual
+    ? cycleIncomeFromTx
+    : Math.max(0, Math.floor(monthlyIncome || 0))
+
+  // 全引落（サイクル内）
+  const cycleStartDate = isoToDate(payCycleStart)
+  const allCycle = getAllWithdrawalsInRange(
     transactions,
     cards,
     groups,
-    today,
+    cycleStartDate,
     payCycleEndDate,
-  ).filter((w) => w.withdrawalDate >= todayISO)
+  )
+  // 既に口座から出た（過去 + 今日）
+  const alreadyPaid = allCycle.filter((w) => w.withdrawalDate <= todayISO)
+  const alreadyPaidTotal = alreadyPaid.reduce((s, w) => s + w.total, 0)
+  // 残り（明日以降）
+  const pending = allCycle.filter((w) => w.withdrawalDate > todayISO)
+  const pendingTotal = pending.reduce((s, w) => s + w.total, 0)
+  const pendingCount = pending.length
 
-  const pendingTotal = allInRange.reduce((s, w) => s + w.total, 0)
-  const pendingCount = allInRange.length
+  // v0.4.27: 今日の口座残高 = 採用収入 − 既に出た引落（社長指示「今日の引落も反映」）
+  const todayBalance = cycleIncome - alreadyPaidTotal
 
-  // 「次の引落」= 範囲内で最も近い1件（範囲外でも近未来があれば取りたいので拡張）
-  let nextWithdrawal: WithdrawalEntry | null = allInRange[0] ?? null
+  // 「次の引落」= 明日以降で最も近い1件（範囲外でも近未来があれば取りたいので拡張）
+  let nextWithdrawal: WithdrawalEntry | null = pending[0] ?? null
   if (!nextWithdrawal) {
-    // 範囲外の未来も視野に（今日から60日先まで）
     const future = getAllWithdrawalsInRange(
       transactions,
       cards,
       groups,
       today,
       addDays(today, 60),
-    ).filter((w) => w.withdrawalDate >= todayISO)
+    ).filter((w) => w.withdrawalDate > todayISO)
     nextWithdrawal = future[0] ?? null
   }
 
@@ -116,16 +144,18 @@ export function buildCashflowSummary(
 
   let safety: 'safe' | 'warn' | 'danger' = 'safe'
   if (beforePaydayBalance < 0) safety = 'danger'
-  else if (beforePaydayBalance < 60_000) safety = 'warn' // 警戒域: 6万円以下（design refの60万→個人感覚で6万）
+  else if (beforePaydayBalance < 60_000) safety = 'warn'
 
-  // 給料日 = 現サイクル末日の翌日
   const payDate = dateToISO(addDays(payCycleEndDate, 1))
 
   return {
     todayBalance,
+    cycleIncome,
+    incomeIsActual,
     nextWithdrawal,
     pendingTotal,
     pendingCount,
+    alreadyPaidTotal,
     beforePaydayBalance,
     safety,
     payDate,

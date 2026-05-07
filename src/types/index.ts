@@ -25,8 +25,14 @@ export type Transaction = {
   source: 'manual' | 'csv' | 'receipt'
   /** Phase 1: 任意フィールド。未指定は現金/カード未割当扱い */
   cardId?: string
-  /** Phase 1.5: 個別取引 or 請求一括（未指定は個別とみなす） */
-  kind?: 'individual' | 'bulk'
+  /**
+   * 取引種別:
+   * - 'individual': 個別取引（既定）
+   * - 'bulk': 請求一括
+   * - 'income': 収入（給料等、月変動）— v0.4.27 追加
+   * 未指定は 'individual' とみなす
+   */
+  kind?: 'individual' | 'bulk' | 'income'
   /**
    * Sprint1: 請求一括の請求期間（締め期間）。
    * 例: { start: '2026-04-15', end: '2026-05-14' }

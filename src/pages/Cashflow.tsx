@@ -59,10 +59,11 @@ export default function Cashflow() {
         cards,
         billingGroups,
         monthlyIncome,
+        payCycles.current.start,
         payCycles.current.end,
         today,
       ),
-    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.end, today],
+    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.start, payCycles.current.end, today],
   )
 
   // ===== Stage B: カレンダー =====
@@ -138,23 +139,24 @@ export default function Cashflow() {
     return byDate
   }, [calendarMonth, transactions, cards, billingGroups, payDay, shiftRule])
 
-  // 推移残高（今日以降のセルに表示）
+  // v0.4.27: 推移残高（今日終了時点の残高をベースに、明日以降のイベントを順次反映）
   const todayISOStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const runningBalance = useMemo(() => {
     const map = new Map<string, number>()
-    let bal = monthlyIncome
-    // 今日からカレンダー末日までのセルを順に
+    let bal = summary.todayBalance
+    map.set(todayISOStr, bal) // 今日のセル = 既に今日の引落反映済み
     for (const cell of calendarCells) {
-      if (cell.iso < todayISOStr) continue
+      if (cell.iso <= todayISOStr) continue // 今日まではスキップ
       const e = monthEvents.get(cell.iso)
       if (e) {
         for (const w of e.withdrawals) bal -= w.total
-        if (e.isPayDay) bal += monthlyIncome
+        // 給料日には現サイクル収入額を加算（仮に同額として予測）
+        if (e.isPayDay) bal += summary.cycleIncome
       }
       map.set(cell.iso, bal)
     }
     return map
-  }, [calendarCells, monthEvents, monthlyIncome, todayISOStr])
+  }, [calendarCells, monthEvents, todayISOStr, summary.todayBalance, summary.cycleIncome])
 
   const cardColorOfId = (cardId: string): string => {
     if (!cardId) return '#7a6d5e'
@@ -240,20 +242,40 @@ export default function Cashflow() {
             <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-gray-500">
               今日の口座残高
             </p>
-            {monthlyIncome > 0 ? (
+            {summary.cycleIncome > 0 ? (
               <>
                 <p className="text-3xl md:text-[36px] font-bold tabular-nums tracking-tight mt-1">
                   ¥{fmt(summary.todayBalance)}
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  {formatMD(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)}({dayOfWeekLabel(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)}) 時点
+                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">
+                  {todayISOStr.slice(5).replace('-', '/')}({dayOfWeekLabel(todayISOStr)}) 時点
+                  {summary.alreadyPaidTotal > 0 && (
+                    <> · 引落済 −¥{fmt(summary.alreadyPaidTotal)}</>
+                  )}
                 </p>
+                {!summary.incomeIsActual && (
+                  <Link
+                    to="/add"
+                    className="text-[10px] text-accent/80 underline mt-1 inline-block"
+                  >
+                    実額を「収入」で記録（推奨）
+                  </Link>
+                )}
+                {summary.incomeIsActual && (
+                  <span className="text-[10px] text-accent/80 mt-1 inline-block">
+                    ✓ 今月の実収入 ¥{fmt(summary.cycleIncome)}
+                  </span>
+                )}
               </>
             ) : (
               <p className="text-xs text-gray-500 mt-2">
-                <Link to="/settings" className="text-accent underline">
+                <Link to="/add" className="text-accent underline">
+                  入力画面で「収入」を記録
+                </Link>
+                するか、
+                <Link to="/settings" className="text-accent underline ml-1">
                   月収を設定
-                </Link>{' '}
+                </Link>
                 すると残高見通しが表示されます。
               </p>
             )}
@@ -300,7 +322,7 @@ export default function Cashflow() {
             <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-gray-500">
               給料日前日の残高見通し
             </p>
-            {monthlyIncome > 0 ? (
+            {summary.cycleIncome > 0 ? (
               <>
                 <p
                   className={`text-lg font-bold tabular-nums tracking-tight mt-1 ${
@@ -315,11 +337,11 @@ export default function Cashflow() {
                 </p>
                 <div className="mt-2 space-y-1 text-[11px] tabular-nums">
                   <div className="flex justify-between text-gray-700 dark:text-gray-300">
-                    <span>今日残高</span>
+                    <span>今日の残高</span>
                     <span>¥{fmt(summary.todayBalance)}</span>
                   </div>
                   <div className="flex justify-between text-danger">
-                    <span>− 確定済引落</span>
+                    <span>− 残り引落（明日以降）</span>
                     <span>−¥{fmt(summary.pendingTotal)}</span>
                   </div>
                   <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
@@ -355,7 +377,7 @@ export default function Cashflow() {
                 </p>
               </>
             ) : (
-              <p className="text-sm text-gray-400 mt-1">月収未設定</p>
+              <p className="text-sm text-gray-400 mt-1">収入未記録</p>
             )}
           </div>
         </aside>
@@ -598,6 +620,29 @@ export default function Cashflow() {
                 <p className="text-xs text-gray-400 text-center py-6">
                   この日のイベントはありません
                 </p>
+              )}
+
+              {/* v0.4.27: 推移残高（その日終了時点の見通し） */}
+              {selectedDate && runningBalance.has(selectedDate) && (
+                <div className="bg-[#f7f4ed] dark:bg-gray-700 rounded-lg px-3 py-2.5 mt-2">
+                  <p className="text-[10px] tracking-[0.12em] uppercase text-gray-500 font-bold">
+                    その日終了時点の残高見通し
+                  </p>
+                  <p
+                    className={`text-xl font-bold tabular-nums tracking-tight mt-1 ${
+                      (runningBalance.get(selectedDate) ?? 0) < 0
+                        ? 'text-danger'
+                        : (runningBalance.get(selectedDate) ?? 0) < 60_000
+                        ? 'text-warning'
+                        : 'text-accent'
+                    }`}
+                  >
+                    ¥{fmt(runningBalance.get(selectedDate) ?? 0)}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    今日の残高をベースに、当日までのイベントを反映した予測値
+                  </p>
+                </div>
               )}
             </>
           ) : (
