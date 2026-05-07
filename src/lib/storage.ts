@@ -5,6 +5,7 @@ import type {
   Settings,
   BillingGroup,
   Card,
+  BankSnapshot,
 } from '../types'
 
 const KEYS = {
@@ -27,6 +28,8 @@ const KEYS = {
   migrationV048: 'kakebo_migration_v0_4_8',
   /** v0.4.21: 旧apollostationグループをニコス（旧シェル）に補正 */
   migrationV0421: 'kakebo_migration_v0_4_21',
+  /** v0.4.33: 銀行残高スナップショット */
+  bankSnapshots: 'kakebo_bank_snapshots',
 }
 
 export type ImportLogEntry = {
@@ -221,6 +224,20 @@ export const storage = {
   getTimelineFilter: () =>
     load<TimelineFilter>(KEYS.timelineFilter, { visibleCardIds: null }),
   saveTimelineFilter: (v: TimelineFilter) => save(KEYS.timelineFilter, v),
+
+  // v0.4.33: 銀行残高スナップショット
+  getBankSnapshots: () => load<BankSnapshot[]>(KEYS.bankSnapshots, []),
+  saveBankSnapshots: (v: BankSnapshot[]) => save(KEYS.bankSnapshots, v),
+  upsertBankSnapshot: (s: BankSnapshot) => {
+    const list = load<BankSnapshot[]>(KEYS.bankSnapshots, [])
+    // 同じ source + date のスナップショットは上書き（複数回CSV取込しても重複しない）
+    const filtered = list.filter(
+      (x) => !(x.source === s.source && x.date === s.date),
+    )
+    filtered.push(s)
+    filtered.sort((a, b) => a.date.localeCompare(b.date))
+    save(KEYS.bankSnapshots, filtered)
+  },
 
   getImportLog: () => load<ImportLogEntry[]>(KEYS.importLog, []),
   appendImportLog: (entry: ImportLogEntry) => {

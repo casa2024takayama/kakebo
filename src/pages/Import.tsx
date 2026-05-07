@@ -78,6 +78,17 @@ export default function Import() {
       } else if (preset === 'mizuho') {
         const r = await parseMizuhoCsv(file)
         setMizuhoRows(r.rows)
+        // v0.4.33: CSVヘッダから残高スナップショット保存（取込ボタン待たずに即時）
+        if (r.snapshot) {
+          storage.upsertBankSnapshot({
+            id: `mizuho_${r.snapshot.date}`,
+            source: 'mizuho',
+            date: r.snapshot.date,
+            amount: r.snapshot.amount,
+            importedAt: new Date().toISOString(),
+            note: 'みずほ銀行CSV',
+          })
+        }
         // 既存トランザクションとの重複検出: cardBilling のうち
         // 同じ日に同じカード会社の bulk が存在する場合は OFF（C3: カード+日付一致で判定）
         const existingBulkKeys = new Set(

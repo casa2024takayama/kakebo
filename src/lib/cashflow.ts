@@ -14,8 +14,19 @@
  *   future:    未開始（今日 < start）
  */
 
-import type { BillingGroup, Card, Transaction, DaySpec, PayDayShiftRule } from '../types'
-import { getAllWithdrawalsInRange, type WithdrawalEntry } from './withdrawalDate'
+import type {
+  BillingGroup,
+  Card,
+  Transaction,
+  DaySpec,
+  PayDayShiftRule,
+  BankSnapshot,
+} from '../types'
+import {
+  getAllWithdrawalsInRange,
+  computeDerivedDates,
+  type WithdrawalEntry,
+} from './withdrawalDate'
 import { getPayCycleForDate } from './payCycle'
 
 /** YYYY-MM-DD を Date(JST 0:00) に */
@@ -53,8 +64,14 @@ export function classifyCycle(
 }
 
 export type CashflowSummary = {
-  /** 今日の口座残高（収入実額 − 今日までの引落） */
+  /**
+   * 今日の口座残高
+   * - スナップショットあり: snapshot.amount + (snapshot日以降〜今日 の差分)
+   * - スナップショットなし: cycleIncome − alreadyPaid（旧ロジック）
+   */
   todayBalance: number
+  /** 採用したスナップショット（あれば） */
+  snapshot: BankSnapshot | null
   /** 採用された収入額（サイクル内 kind='income' の合計、Q1=D 厳格運用） */
   cycleIncome: number
   /** v0.4.32: 設定の月収（参考値として常に保持） */
@@ -93,6 +110,7 @@ export function buildCashflowSummary(
   today: Date = new Date(),
   payDay: DaySpec = 15,
   shiftRule: PayDayShiftRule = 'before',
+  bankSnapshots: BankSnapshot[] = [],
 ): CashflowSummary {
   const todayISO = dateToISO(today)
   const payCycleEndDate = isoToDate(payCycleEnd)
@@ -149,8 +167,40 @@ export function buildCashflowSummary(
   const pendingTotal = pending.reduce((s, w) => s + w.total, 0)
   const pendingCount = pending.length
 
-  // v0.4.27: 今日の口座残高 = 採用収入 − 既に出た引落（社長指示「今日の引落も反映」）
-  const todayBalance = cycleIncome - alreadyPaidTotal
+  // v0.4.33: 銀行残高スナップショットがあればそれを真実値として採用
+  // todayBalance = snapshot.amount + (snapshot.date < t.date <= today の差分)
+  // 差分: kind='income' は加算、それ以外（excludeFromWithdrawalでない引落）は減算
+  const latestSnapshot =
+    bankSnapshots.length > 0
+      ? [...bankSnapshots].sort((a, b) => b.date.localeCompare(a.date))[0]
+      : null
+
+  let todayBalance: number
+  if (latestSnapshot) {
+    let delta = 0
+    for (const t of transactions) {
+      if (t.excludeFromWithdrawal) continue
+      // 引落日（派生）と利用日両方を考慮: incomeはt.date、その他はwithdrawalDate
+      let effectiveDate: string
+      if (t.kind === 'income') {
+        effectiveDate = t.date
+      } else {
+        const derived = computeDerivedDates(t, groups, cards)
+        effectiveDate = derived?.withdrawalDate ?? t.date
+      }
+      if (effectiveDate <= latestSnapshot.date) continue // スナップショットに既に反映
+      if (effectiveDate > todayISO) continue // 未来は対象外
+      if (t.kind === 'income') {
+        delta += t.amount
+      } else {
+        delta -= t.amount
+      }
+    }
+    todayBalance = latestSnapshot.amount + delta
+  } else {
+    // フォールバック: 旧ロジック（収入−既出引落）
+    todayBalance = cycleIncome - alreadyPaidTotal
+  }
 
   // 「次の引落」= 明日以降で最も近い1件（範囲外でも近未来があれば取りたいので拡張）
   let nextWithdrawal: WithdrawalEntry | null = pending[0] ?? null
@@ -175,6 +225,7 @@ export function buildCashflowSummary(
 
   return {
     todayBalance,
+    snapshot: latestSnapshot,
     cycleIncome,
     settingsMonthlyIncome,
     pastCycleIncomes,

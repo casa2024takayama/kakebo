@@ -392,6 +392,8 @@ export type MizuhoParseResult = {
   rows: MizuhoRow[]
   startDate: string
   endDate: string
+  /** v0.4.33: CSVヘッダから取得した銀行残高スナップショット */
+  snapshot: { date: string; amount: number } | null
 }
 
 function classifyMizuhoRow(
@@ -479,16 +481,25 @@ export async function parseMizuhoCsv(file: File): Promise<MizuhoParseResult> {
     throw new Error('みずほ銀行CSVのヘッダ行（明細通番,日付,...）が見つかりません')
   }
 
-  // 期間情報（任意）
+  // 期間情報＋現在残高（v0.4.33）
   let startDate = ''
   let endDate = ''
+  let currentBalance = NaN
   for (let i = 0; i < detailStart; i++) {
     const row = rows[i] ?? []
     const lbl = (row[0] ?? '').trim()
     const val = (row[1] ?? '').trim()
     if (/開始/.test(lbl) && val) startDate = parseDateLoose(val) ?? ''
     if (/終了/.test(lbl) && val) endDate = parseDateLoose(val) ?? ''
+    if (/現在残高/.test(lbl) && val) {
+      const n = parseAmount(val)
+      if (Number.isFinite(n)) currentBalance = n
+    }
   }
+  const snapshot =
+    Number.isFinite(currentBalance) && endDate
+      ? { date: endDate, amount: currentBalance }
+      : null
 
   const out: MizuhoRow[] = []
   for (let i = detailStart; i < rows.length; i++) {
@@ -520,6 +531,6 @@ export async function parseMizuhoCsv(file: File): Promise<MizuhoParseResult> {
     })
   }
 
-  return { rows: out, startDate, endDate }
+  return { rows: out, startDate, endDate, snapshot }
 }
 

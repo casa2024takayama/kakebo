@@ -14,6 +14,7 @@ import { useStore } from '../store'
 import { getCurrentAndNextCycles, getPayCycleForDate } from '../lib/payCycle'
 import { buildCashflowSummary } from '../lib/cashflow'
 import { getAllWithdrawalsInRange } from '../lib/withdrawalDate'
+import { storage } from '../lib/storage'
 
 function fmt(n: number): string {
   return n.toLocaleString('ja-JP')
@@ -52,6 +53,9 @@ export default function Cashflow() {
     [payDay, shiftRule, today],
   )
 
+  // v0.4.33: 銀行残高スナップショット取得
+  const bankSnapshots = useMemo(() => storage.getBankSnapshots(), [transactions])
+
   const summary = useMemo(
     () =>
       buildCashflowSummary(
@@ -64,8 +68,9 @@ export default function Cashflow() {
         today,
         payDay,
         shiftRule,
+        bankSnapshots,
       ),
-    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.start, payCycles.current.end, today, payDay, shiftRule],
+    [transactions, cards, billingGroups, monthlyIncome, payCycles.current.start, payCycles.current.end, today, payDay, shiftRule, bankSnapshots],
   )
 
   // ===== Stage B: カレンダー =====
@@ -251,12 +256,26 @@ export default function Cashflow() {
                 </p>
                 <p className="text-[11px] text-gray-400 mt-1 tabular-nums">
                   {todayISOStr.slice(5).replace('-', '/')}({dayOfWeekLabel(todayISOStr)}) 時点
-                  {summary.alreadyPaidTotal > 0 && (
-                    <> · 引落済 −¥{fmt(summary.alreadyPaidTotal)}</>
-                  )}
                 </p>
                 <div className="mt-2 space-y-0.5">
-                  <div className="flex items-center justify-between text-[11px] tabular-nums">
+                  {summary.snapshot ? (
+                    <>
+                      <div className="flex items-center justify-between text-[11px] tabular-nums">
+                        <span className="text-blue-700">📊 銀行残高スナップショット</span>
+                        <span className="text-blue-700 font-semibold">
+                          ¥{fmt(summary.snapshot.amount)}
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-gray-400 tabular-nums">
+                        {summary.snapshot.date}（{summary.snapshot.note ?? summary.snapshot.source}）以降の差分を反映
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-gray-400">
+                      みずほCSV取込で銀行残高を同期できます
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between text-[11px] tabular-nums pt-1">
                     <span className="text-accent/80">✓ 今サイクルの実収入</span>
                     <span className="text-accent font-semibold">
                       ¥{fmt(summary.cycleIncome)}
@@ -513,11 +532,19 @@ export default function Cashflow() {
 
                   {/* イベント */}
                   <div className="mt-0.5 space-y-0.5">
-                    {event?.isPayDay && (
-                      <div className="bg-[#e6efe8] text-[#3d6e4a] text-[9px] font-semibold px-1 py-0.5 rounded tabular-nums">
-                        +¥{(monthlyIncome / 10000).toFixed(0)}万
-                      </div>
-                    )}
+                    {event?.isPayDay && (() => {
+                      // v0.4.33: 給料日タグの金額は「その日に発生した実 income transactions の合計」
+                      // 実データなければサイクル収入額、それも0なら設定値
+                      const actualOnDay = transactions
+                        .filter((t) => t.kind === 'income' && t.date === cell.iso)
+                        .reduce((s, t) => s + t.amount, 0)
+                      const dispYen = actualOnDay > 0 ? actualOnDay : summary.cycleIncome > 0 ? summary.cycleIncome : monthlyIncome
+                      return (
+                        <div className="bg-[#e6efe8] text-[#3d6e4a] text-[9px] font-semibold px-1 py-0.5 rounded tabular-nums">
+                          +¥{(dispYen / 10000).toFixed(0)}万
+                        </div>
+                      )
+                    })()}
                     {event?.withdrawals.slice(0, 2).map((w, i) => (
                       <div
                         key={i}

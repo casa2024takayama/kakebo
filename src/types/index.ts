@@ -88,6 +88,24 @@ export type Settings = {
 
 export type MonthKey = string // "2026-04"
 
+/**
+ * v0.4.33: 銀行残高スナップショット。
+ * CSV取込時の「現在残高」+「照会期間終了日付」を真実値として保持。
+ * 以降の取引は snapshot 以降の差分として残高に反映される。
+ */
+export type BankSnapshot = {
+  id: string
+  source: 'mizuho' | 'manual'
+  /** スナップショット時点の日付 YYYY-MM-DD */
+  date: string
+  /** その時点の銀行残高（円） */
+  amount: number
+  /** 取込時刻（ISO） */
+  importedAt: string
+  /** 任意の補足（例: 三菱UFJ ◯◯支店 等） */
+  note?: string
+}
+
 // ===== Phase 1: 請求グループ・カード =====
 
 /** 締め日・引落日。1〜31 または末日('last') */
