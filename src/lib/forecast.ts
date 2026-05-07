@@ -7,7 +7,7 @@ import type {
   MonthlyDeficit,
   ConcentrationAlert,
 } from '../types'
-import { getCycleForTransaction } from './billingCycle'
+import { getCycleForTransaction, getCycleByWithdrawalDate } from './billingCycle'
 
 /**
  * Phase 1.5: forecast 計算対象の取引かを判定。
@@ -46,17 +46,20 @@ export function getUpcomingWithdrawals(
     if (!groupId) continue
     const group = groups.find((g) => g.id === groupId)
     if (!group) continue
-    // 請求一括は billingPeriod / billingMonth から該当月の引落サイクルを推定する
+    // v0.4.20: actualWithdrawalDate が設定されていれば、サイクル全体を逆算で再計算。
+    // 旧来は引落日だけ override し cycleStart/End は theoretical のままで、
+    // 「明細の請求期間（3/11-4/10）」と「ホームの請求期間（5/11-6/10）」が不一致になっていた。
     let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
-    if (t.kind === 'bulk' && t.billingPeriod) {
+    if (t.actualWithdrawalDate) {
+      cyc = getCycleByWithdrawalDate(t.actualWithdrawalDate, group)
+    } else if (t.kind === 'bulk' && t.billingPeriod) {
       cyc = getCycleForTransaction(t.billingPeriod.end, group)
     } else if (t.kind === 'bulk' && t.billingMonth) {
       cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
     } else {
       cyc = getCycleForTransaction(t.date, group)
     }
-    // v0.4.3: 実引落日が設定されていれば優先
-    const wd = t.actualWithdrawalDate ?? cyc.withdrawalDate
+    const wd = cyc.withdrawalDate
     let g = buckets.get(groupId)
     if (!g) {
       g = new Map()

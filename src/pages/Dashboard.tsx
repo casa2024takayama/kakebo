@@ -24,6 +24,7 @@ export default function Dashboard() {
     transactions,
     billingGroups,
     cards,
+    categories,
     settings,
     applyFixedCostsIfNeeded,
   } = useStore()
@@ -443,9 +444,25 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {cardNameOf(w.cardId)}
-                    </p>
+                    {/* v0.4.20: 非カードはカテゴリ＋メモを表示。カードはカード名。 */}
+                    {(() => {
+                      if (w.cardId) {
+                        return (
+                          <p className="text-sm font-medium truncate">
+                            {cardNameOf(w.cardId)}
+                          </p>
+                        )
+                      }
+                      const t = w.transactions[0]
+                      const cat = t ? categories.find((c) => c.id === t.categoryId) : undefined
+                      const label = cat?.name ?? '非カード'
+                      return (
+                        <p className="text-sm font-medium truncate">
+                          <span className="text-xs text-gray-500 mr-1">{label}</span>
+                          {t?.memo || '—'}
+                        </p>
+                      )
+                    })()}
                     <p className="text-[11px] text-gray-500 mt-0.5">
                       あと{days}日 ・ {dayOfWeekLabel(w.withdrawalDate)}
                     </p>
