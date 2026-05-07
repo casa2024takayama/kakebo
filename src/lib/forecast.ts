@@ -15,6 +15,8 @@ import { getCycleForTransaction, getCycleByWithdrawalDate } from './billingCycle
  * - 請求一括（kind='bulk'）はそのまま集計対象
  */
 function isForecastTarget(t: Transaction): boolean {
+  // v0.4.29: 収入(kind='income')は引落集計に含めない
+  if (t.kind === 'income') return false
   if (t.kind === 'bulk') return true
   return t.excludeFromWithdrawal !== true
 }

@@ -400,23 +400,27 @@ function classifyMizuhoRow(
 ): { classification: MizuhoClassification; cardKeyword?: string } {
   const desc = description.normalize('NFKC').toLowerCase()
 
-  // 入金は基本的に給与/振込として扱う
+  // 入金（プラス）は kind='income' として記録。残高に加算される。
   if (!isOutgoing) {
-    if (/給与|賞与|ボーナス|salary|ライズ|ｵﾌｲｽ|会社/i.test(desc)) {
-      return { classification: 'income' }
-    }
-    return { classification: 'income' } // とりあえず入金は全部 income 扱い（後で再分類可）
+    return { classification: 'income' }
   }
 
   // 出金: カード会社の引落（dedup対象）
+  // v0.4.29: 「ジェーシービー」(カタカナJCB)、「イオンフイナンシヤル」表記揺れに対応
   const cardKeywords: { kw: RegExp; key: string }[] = [
     { kw: /paypay.*カード|paypay.*ｶｰﾄﾞ|ペイペイ.*カード/i, key: 'PayPay' },
     { kw: /セゾン|saison|ｾｿﾞﾝ/i, key: 'セゾン' },
-    { kw: /イオン.*ファイナンシャル|aeon|ｲｵﾝ/i, key: 'イオン' },
-    { kw: /jcb/i, key: 'JCB' },
+    // 「イオンファイナンシャル」「イオンフイナンシヤル」「イオンフィナンシャル」等を
+    // 表記揺れごと包括: 「イオン」+「ファ?イ?ナン」を含むもの
+    {
+      kw: /イオン.{0,3}(ファ?イ?ナン|ﾌｧ?ｲ?ﾅﾝ)|aeon\s*financ/i,
+      key: 'イオン',
+    },
+    // JCB: 英字 / 全角・半角カタカナ「ジェーシービー」「ｼﾞｪｰｼｰﾋﾞｰ」
+    { kw: /\bjcb\b|ジェーシービー|ｼﾞｪｰｼｰﾋﾞｰ/i, key: 'JCB' },
     { kw: /nicos|ニコス|ｼｪﾙ|シェル/i, key: 'ニコス' },
     { kw: /楽天.*カード|rakuten.*card|ｶﾞｸﾃﾝ/i, key: '楽天' },
-    { kw: /ビュー.*カード|view.*card|ｭﾞｭ.|ﾋﾞｭｰ/i, key: 'ビュー' },
+    { kw: /ビュー.*カード|view.*card|ﾋﾞｭｰ.*ｶｰﾄﾞ/i, key: 'ビュー' },
     { kw: /jal.*カード|jal.*card/i, key: 'JAL' },
     { kw: /j-?west|west.*card/i, key: 'J-WEST' },
     { kw: /出光|ｲﾃﾞﾐﾂ|apollo/i, key: 'apollostation' },
@@ -435,6 +439,7 @@ function classifyMizuhoRow(
     return { classification: 'atmWithdraw' }
   }
 
+  // それ以外は「その他」（社長指示: 基本デフォルト）
   return { classification: 'other' }
 }
 

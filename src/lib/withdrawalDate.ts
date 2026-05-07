@@ -110,6 +110,7 @@ export function getAllWithdrawalsInRange(
 
   for (const t of transactions) {
     if (t.excludeFromWithdrawal) continue
+    if (t.kind === 'income') continue // v0.4.29: 収入は引落集計に含めない
     const derived = computeDerivedDates(t, groups, cards)
     if (!derived) continue
     if (!isoBetween(derived.withdrawalDate, startISO, endISO)) continue
