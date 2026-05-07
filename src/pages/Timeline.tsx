@@ -131,6 +131,36 @@ export default function Timeline() {
   const [cycleOffset, setCycleOffset] = useState(0)
   const [popover, setPopover] = useState<Popover>(null)
   const [showHint, setShowHint] = useState(true)
+
+  // v0.4.22: キーボード矢印でサイクル前後ナビゲーション。
+  // ← / → でサイクル移動、Home / 0 で「今日のサイクル」に戻る。
+  // input/textarea にフォーカスがあるときは無効。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null
+      if (tgt && /^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName)) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (popover) {
+        if (e.key === 'Escape') {
+          setPopover(null)
+          e.preventDefault()
+        }
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        setCycleOffset((v) => v - 1)
+        e.preventDefault()
+      } else if (e.key === 'ArrowRight') {
+        setCycleOffset((v) => v + 1)
+        e.preventDefault()
+      } else if (e.key === 'Home' || e.key === '0') {
+        setCycleOffset(0)
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [popover])
   const [overflowMsg, setOverflowMsg] = useState<string | null>(null)
   const [viewport, setViewport] = useState<{ w: number; h: number }>({
     w: typeof window !== 'undefined' ? window.innerWidth : 1280,
@@ -426,6 +456,7 @@ export default function Timeline() {
             onClick={() => setCycleOffset((v) => v - 1)}
             className="p-2 text-gray-500 hover:text-accent rounded"
             aria-label="前のサイクル"
+            title="前のサイクル（←）"
           >
             <ChevronLeft size={18} />
           </button>
@@ -433,7 +464,7 @@ export default function Timeline() {
             onClick={() => setCycleOffset(0)}
             className="p-2 text-gray-500 hover:text-accent rounded"
             aria-label="今へ"
-            title="今へ"
+            title="今へ（Home / 0）"
           >
             <RotateCw size={16} />
           </button>
@@ -441,6 +472,7 @@ export default function Timeline() {
             onClick={() => setCycleOffset((v) => v + 1)}
             className="p-2 text-gray-500 hover:text-accent rounded"
             aria-label="次のサイクル"
+            title="次のサイクル（→）"
           >
             <ChevronRight size={18} />
           </button>
@@ -553,7 +585,8 @@ export default function Timeline() {
               <svg
                 width={plotWidth}
                 height={totalH}
-                className="absolute inset-0 pointer-events-none"
+                className="absolute inset-0 pointer-events-none timeline-fade"
+                key={`tl-${rangeStart}-${rangeEnd}`}
               >
                 {/* Center axis line */}
                 <line
