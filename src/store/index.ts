@@ -87,10 +87,12 @@ function uid(): string {
 }
 
 // v0.4.4: テストモードならページロード時に取引・固定費をクリア
+// v0.4.35: 銀行残高スナップショットもクリア対象に追加
 const _initialSettings = storage.getSettings()
 if (_initialSettings.testMode) {
   storage.saveTransactions([])
   storage.saveFixedCosts([])
+  storage.saveBankSnapshots([])
 }
 
 export const useStore = create<Store>((set, get) => ({
