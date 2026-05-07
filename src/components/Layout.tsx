@@ -7,6 +7,7 @@ import {
   CreditCard,
   Settings,
   CalendarRange,
+  Wallet,
   X,
 } from 'lucide-react'
 import { useStore } from '../store'
@@ -14,6 +15,7 @@ import { storage } from '../lib/storage'
 
 const nav = [
   { to: '/', icon: LayoutDashboard, label: 'ホーム' },
+  { to: '/cashflow', icon: Wallet, label: '家計' },
   { to: '/timeline', icon: CalendarRange, label: 'タイムライン' },
   { to: '/cards', icon: CreditCard, label: 'カード' },
   { to: '/add', icon: PlusCircle, label: '入力' },
