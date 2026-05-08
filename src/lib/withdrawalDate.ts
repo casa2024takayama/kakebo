@@ -114,7 +114,10 @@ export function getAllWithdrawalsInRange(
   //   2. billingMonth 由来（理論サイクル）
   //   3. billingPeriod 由来（明示設定）
   // データ不整合（例: 古いbulkのactualWithdrawalDateが間違っている）にも対応するため複数登録。
-  const bulkCoverage = new Map<string, Array<{ start: string; end: string }>>()
+  const bulkCoverage = new Map<
+    string,
+    { periods: Array<{ start: string; end: string }>; withdrawalDates: Set<string> }
+  >()
   for (const t of transactions) {
     if (t.kind !== 'bulk') continue
     if (t.excludeFromWithdrawal) continue
@@ -122,34 +125,52 @@ export function getAllWithdrawalsInRange(
     const card = cards.find((c) => c.id === t.cardId)
     const group = card ? groups.find((g) => g.id === card.billingGroupId) : null
     const periods: Array<{ start: string; end: string }> = []
+    const wds: string[] = []
     const d = computeDerivedDates(t, groups, cards)
-    if (d) periods.push({ start: d.cycleStart, end: d.cycleEnd })
+    if (d) {
+      periods.push({ start: d.cycleStart, end: d.cycleEnd })
+      wds.push(d.withdrawalDate)
+    }
     if (group && t.billingMonth) {
       const c = getCycleForTransaction(`${t.billingMonth}-15`, group)
       periods.push({ start: c.cycleStart, end: c.cycleEnd })
+      wds.push(c.withdrawalDate)
     }
     if (t.billingPeriod) {
       periods.push({ start: t.billingPeriod.start, end: t.billingPeriod.end })
+      if (group) {
+        const c = getCycleForTransaction(t.billingPeriod.end, group)
+        wds.push(c.withdrawalDate)
+      }
     }
     if (periods.length > 0) {
-      const arr = bulkCoverage.get(t.cardId) ?? []
-      arr.push(...periods)
-      bulkCoverage.set(t.cardId, arr)
+      const existing = bulkCoverage.get(t.cardId) ?? {
+        periods: [],
+        withdrawalDates: new Set<string>(),
+      }
+      existing.periods.push(...periods)
+      for (const wd of wds) existing.withdrawalDates.add(wd)
+      bulkCoverage.set(t.cardId, existing)
     }
   }
 
   for (const t of transactions) {
     if (t.excludeFromWithdrawal) continue
     if (t.kind === 'income') continue // v0.4.29: 収入は引落集計に含めない
+    const derived = computeDerivedDates(t, groups, cards)
+    if (!derived) continue
     // v0.4.36: bulkに覆われた個別取引はスキップ（フラグ漏れの安全網）
     if (t.kind !== 'bulk' && t.cardId) {
-      const periods = bulkCoverage.get(t.cardId)
-      if (periods?.some((p) => t.date >= p.start && t.date <= p.end)) {
+      const coverage = bulkCoverage.get(t.cardId)
+      const coveredByPeriod =
+        coverage?.periods.some((p) => t.date >= p.start && t.date <= p.end) ?? false
+      const coveredByWithdrawalDate =
+        coverage?.withdrawalDates.has(t.actualWithdrawalDate ?? derived.withdrawalDate) ??
+        false
+      if (coveredByPeriod || coveredByWithdrawalDate) {
         continue
       }
     }
-    const derived = computeDerivedDates(t, groups, cards)
-    if (!derived) continue
     if (!isoBetween(derived.withdrawalDate, startISO, endISO)) continue
 
     // v0.4.19: 非カード取引（住宅ローン・サブスク等）も含める。各取引を独立したエントリで保持。

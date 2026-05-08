@@ -7,7 +7,8 @@ import type {
   MonthlyDeficit,
   ConcentrationAlert,
 } from '../types'
-import { getCycleForTransaction, getCycleByWithdrawalDate } from './billingCycle'
+import { getCycleForTransaction } from './billingCycle'
+import { getAllWithdrawalsInRange } from './withdrawalDate'
 
 /**
  * Phase 1.5: forecast 計算対象の取引かを判定。
@@ -37,66 +38,37 @@ export function getUpcomingWithdrawals(
   cards: Card[],
   today: Date = new Date(),
 ): WithdrawalForecast[] {
-  const c2g = cardToGroup(cards)
-  // groupId -> withdrawalDate -> { start, end, total }
-  const buckets = new Map<string, Map<string, BillingCycle>>()
-
-  for (const t of transactions) {
-    if (!t.cardId) continue
-    if (!isForecastTarget(t)) continue
-    const groupId = c2g.get(t.cardId)
-    if (!groupId) continue
-    const group = groups.find((g) => g.id === groupId)
-    if (!group) continue
-    // v0.4.20: actualWithdrawalDate が設定されていれば、サイクル全体を逆算で再計算。
-    // 旧来は引落日だけ override し cycleStart/End は theoretical のままで、
-    // 「明細の請求期間（3/11-4/10）」と「ホームの請求期間（5/11-6/10）」が不一致になっていた。
-    let cyc: { cycleStart: string; cycleEnd: string; withdrawalDate: string }
-    if (t.actualWithdrawalDate) {
-      cyc = getCycleByWithdrawalDate(t.actualWithdrawalDate, group)
-    } else if (t.kind === 'bulk' && t.billingPeriod) {
-      cyc = getCycleForTransaction(t.billingPeriod.end, group)
-    } else if (t.kind === 'bulk' && t.billingMonth) {
-      cyc = getCycleForTransaction(`${t.billingMonth}-15`, group)
-    } else {
-      cyc = getCycleForTransaction(t.date, group)
-    }
-    const wd = cyc.withdrawalDate
-    let g = buckets.get(groupId)
-    if (!g) {
-      g = new Map()
-      buckets.set(groupId, g)
-    }
-    const existing = g.get(wd)
-    if (existing) {
-      existing.total += t.amount
-    } else {
-      g.set(wd, {
-        groupId,
-        cycleStart: cyc.cycleStart,
-        cycleEnd: cyc.cycleEnd,
-        withdrawalDate: wd,
-        total: t.amount,
-      })
-    }
-  }
-
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
     2,
     '0',
   )}-${String(today.getDate()).padStart(2, '0')}`
+  const horizon = new Date(today)
+  horizon.setDate(horizon.getDate() + 120)
+  const allUpcoming = getAllWithdrawalsInRange(
+    transactions,
+    cards,
+    groups,
+    today,
+    horizon,
+  ).filter((w) => w.withdrawalDate >= todayISO && w.groupId)
+  const upcomingByGroup = new Map<string, BillingCycle>()
+  for (const w of allUpcoming) {
+    const existing = upcomingByGroup.get(w.groupId)
+    if (!existing || w.withdrawalDate < existing.withdrawalDate) {
+      upcomingByGroup.set(w.groupId, {
+        groupId: w.groupId,
+        cycleStart: w.cycleStart,
+        cycleEnd: w.cycleEnd,
+        withdrawalDate: w.withdrawalDate,
+        total: w.total,
+      })
+    }
+  }
 
   // 各グループから「今日以降の最も近い1件」を抽出
   const result: WithdrawalForecast[] = []
   for (const group of groups) {
-    const g = buckets.get(group.id)
-    let pick: BillingCycle | undefined
-    if (g) {
-      const upcoming = Array.from(g.values())
-        .filter((c) => c.withdrawalDate >= todayISO)
-        .sort((a, b) => a.withdrawalDate.localeCompare(b.withdrawalDate))
-      pick = upcoming[0]
-    }
+    const pick = upcomingByGroup.get(group.id)
     if (pick) {
       result.push({ group, cycle: pick })
     } else {

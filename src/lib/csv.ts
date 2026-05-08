@@ -94,13 +94,24 @@ export async function parseCsv(
           const date = parseDate(row[cols.date] ?? '')
           // 日付/金額がパースできない行は黙って捨てる（呼び出し側で件数差分が分かる）
           if (date === null || !Number.isFinite(amount) || amount === 0) continue
-          transactions.push({
-            amount,
-            date,
-            memo,
-            categoryId,
-            source: 'csv' as const,
-          })
+          if (amount < 0) {
+            transactions.push({
+              amount: Math.abs(amount),
+              date,
+              memo: memo ? `[返金] ${memo}` : '返金',
+              categoryId: '',
+              source: 'csv' as const,
+              kind: 'income',
+            })
+          } else {
+            transactions.push({
+              amount,
+              date,
+              memo,
+              categoryId,
+              source: 'csv' as const,
+            })
+          }
         }
         resolve(transactions)
       },
@@ -348,16 +359,27 @@ export async function parseSaisonCsv(
       categoryRules.find((r) => memoRaw.includes(r.keyword))?.categoryId ??
       'other'
 
-    details.push({
-      amount,
-      date,
-      memo: memoRaw,
-      categoryId,
-      source: 'csv',
-      kind: 'individual',
-      // v0.4.3: CSVに記載された実引落日を全明細に自動付与（請求遅延の繰越分も正しく5/7扱いに）
-      ...(withdrawalDate ? { actualWithdrawalDate: withdrawalDate } : {}),
-    })
+    if (amount < 0) {
+      details.push({
+        amount: Math.abs(amount),
+        date,
+        memo: memoRaw ? `[返金] ${memoRaw}` : '返金',
+        categoryId: '',
+        source: 'csv',
+        kind: 'income',
+      })
+    } else {
+      details.push({
+        amount,
+        date,
+        memo: memoRaw,
+        categoryId,
+        source: 'csv',
+        kind: 'individual',
+        // v0.4.3: CSVに記載された実引落日を全明細に自動付与（請求遅延の繰越分も正しく5/7扱いに）
+        ...(withdrawalDate ? { actualWithdrawalDate: withdrawalDate } : {}),
+      })
+    }
   }
 
   return { cardName, withdrawalDate, totalBilled, details }

@@ -1,12 +1,13 @@
 {
   "name": "kakebo",
   "private": true,
-  "version": "0.4.36",
+  "version": "0.4.37",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ship:docs": "git add \"システム仕様書.md\" && git commit -m \"docs: update system specification\" && git push"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.3",

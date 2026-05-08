@@ -169,6 +169,12 @@ VITE_ANTHROPIC_API_KEY=your_key_here
 > デザインの細部はAppleのHuman Interface Guidelinesとフィナンシャルプランナーの観点を組み合わせ、あなたの判断で最善のものを作ってください。指示待ちは不要です。
 > まずプロジェクト構成を作り、ダッシュボード → 手動入力 → 予算設定 → CSVインポート → 固定費管理 → レシート読み取りの順で実装してください。
 
+## AI協調運用（Claude Code + Cursor）
+
+- 本リポジトリは Claude Code と Cursor の併用開発を行う。
+- 実装ルールは `docs/AI_COLLAB_RULES.md` を最優先で参照すること。
+- とくに「引落集計の共通化」「dedupの引落日基準」「返金は収入扱い」の3点は必ず遵守すること。
+
 ---
 
 *生成日: 2026-04-30*
