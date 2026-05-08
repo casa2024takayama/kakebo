@@ -132,6 +132,28 @@ export default function Import() {
 
     if ((preset === 'saison' || preset === 'aeon') && saisonResult) {
       const cardId = matchedCardId || undefined
+      const card = cardId ? cards.find((c) => c.id === cardId) : undefined
+      const group = card
+        ? billingGroups.find((g) => g.id === card.billingGroupId)
+        : undefined
+      // 支払日がCSVに無いケース（AEON形式など）では、明細利用日の最大日から理論引落日を推定する
+      const inferredFromDetails = (() => {
+        if (!group || toImport.length === 0) return null
+        const latestUsageDate = [...toImport]
+          .map((t) => t.date)
+          .sort((a, b) => a.localeCompare(b))
+          .at(-1)
+        if (!latestUsageDate) return null
+        return getCycleForTransaction(latestUsageDate, group)
+      })()
+      const targetWd =
+        saisonResult.withdrawalDate ||
+        inferredFromDetails?.withdrawalDate ||
+        ''
+      const billingMonth =
+        targetWd.slice(0, 7) ||
+        inferredFromDetails?.withdrawalDate.slice(0, 7) ||
+        new Date().toISOString().slice(0, 7)
       // v0.4.11: 重複検出 - 既存と (date, amount, memo, cardId) が一致するレコードはスキップ
       const existingKeys = new Set(
         transactions
@@ -139,7 +161,13 @@ export default function Import() {
           .map((t) => `${t.date}|${t.amount}|${t.memo}|${t.cardId ?? ''}`),
       )
       const stamped: Preview[] = toImport
-        .map((t) => ({ ...t, cardId }))
+        .map((t) => ({
+          ...t,
+          cardId,
+          ...(targetWd && (t.kind ?? 'individual') === 'individual'
+            ? { actualWithdrawalDate: targetWd }
+            : {}),
+        }))
         .filter(
           (t) =>
             !existingKeys.has(
@@ -150,16 +178,7 @@ export default function Import() {
 
       // 請求一括レコードの生成 + 重複制御
       if (createBulkRecord && cardId && saisonResult.totalBilled > 0) {
-        const card = cards.find((c) => c.id === cardId)
-        const group = card
-          ? billingGroups.find((g) => g.id === card.billingGroupId)
-          : undefined
         if (card && group) {
-          // 引落日から請求月を逆算（withdrawalDate の年月をそのまま使う）
-          const billingMonth = saisonResult.withdrawalDate
-            ? saisonResult.withdrawalDate.slice(0, 7)
-            : new Date().toISOString().slice(0, 7)
-          const cyc = getCycleForTransaction(`${billingMonth}-15`, group)
           const groupCardIds = cards
             .filter((c) => c.billingGroupId === group.id)
             .map((c) => c.id)
@@ -167,7 +186,6 @@ export default function Import() {
           // 旧来の「理論サイクル期間 [cycleStart, cycleEnd]」基準だと、
           // 請求遅延でCSVに含まれる前期繰越分（利用日が前サイクル）が範囲外で漏れていた。
           // → 同じ実引落日に着弾する個別を確実に「記録のみ」化する。
-          const targetWd = saisonResult.withdrawalDate || cyc.withdrawalDate
           const dupes = transactions
             .filter(
               (t) =>
@@ -223,10 +241,10 @@ export default function Import() {
             amount: saisonResult.totalBilled,
             categoryId: categories[0]?.id ?? 'other',
             memo: `${card.name}請求一括（${billingMonth}）`,
-            date: targetWd,
+            date: targetWd || new Date().toISOString().slice(0, 10),
             // v0.4.5: 実引落日を明示。これがないと computeDerivedDates が
             // billingMonth から理論計算してしまい、bulkの引落日が誤った日(例:7/6)になる。
-            actualWithdrawalDate: targetWd,
+            ...(targetWd ? { actualWithdrawalDate: targetWd } : {}),
             source: 'csv',
             cardId,
             kind: 'bulk',
