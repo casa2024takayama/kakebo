@@ -190,6 +190,7 @@ export default function Cashflow() {
   const selectedDayEvent = selectedDate ? monthEvents.get(selectedDate) : undefined
 
   // 今日以降の引落予定すべて（最大90日先まで）
+  // v0.4.36: dedup は getAllWithdrawalsInRange 内蔵（bulkカバレッジで個別取引を自動除外）
   const pendingBills = useMemo(() => {
     const horizon = new Date(today)
     horizon.setDate(horizon.getDate() + 90)

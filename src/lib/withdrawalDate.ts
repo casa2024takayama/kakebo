@@ -108,19 +108,34 @@ export function getAllWithdrawalsInRange(
   const endISO = dateToISO(endDate)
   const map = new Map<string, WithdrawalEntry>()
 
-  // v0.4.36: bulkカバレッジ自動検出
-  // 各bulk(cardId付き)の cycle期間内の個別取引は、bulkで代表されるため自動スキップ。
-  // excludeFromWithdrawal フラグが何らかの理由で立っていない場合の安全網。
+  // v0.4.36: bulkカバレッジ自動検出（多重ソース）
+  // 各bulkは以下から coverage period を生成:
+  //   1. computeDerivedDates 由来（actualWithdrawalDate 優先のサイクル）
+  //   2. billingMonth 由来（理論サイクル）
+  //   3. billingPeriod 由来（明示設定）
+  // データ不整合（例: 古いbulkのactualWithdrawalDateが間違っている）にも対応するため複数登録。
   const bulkCoverage = new Map<string, Array<{ start: string; end: string }>>()
   for (const t of transactions) {
     if (t.kind !== 'bulk') continue
     if (t.excludeFromWithdrawal) continue
     if (!t.cardId) continue
+    const card = cards.find((c) => c.id === t.cardId)
+    const group = card ? groups.find((g) => g.id === card.billingGroupId) : null
+    const periods: Array<{ start: string; end: string }> = []
     const d = computeDerivedDates(t, groups, cards)
-    if (!d) continue
-    const arr = bulkCoverage.get(t.cardId) ?? []
-    arr.push({ start: d.cycleStart, end: d.cycleEnd })
-    bulkCoverage.set(t.cardId, arr)
+    if (d) periods.push({ start: d.cycleStart, end: d.cycleEnd })
+    if (group && t.billingMonth) {
+      const c = getCycleForTransaction(`${t.billingMonth}-15`, group)
+      periods.push({ start: c.cycleStart, end: c.cycleEnd })
+    }
+    if (t.billingPeriod) {
+      periods.push({ start: t.billingPeriod.start, end: t.billingPeriod.end })
+    }
+    if (periods.length > 0) {
+      const arr = bulkCoverage.get(t.cardId) ?? []
+      arr.push(...periods)
+      bulkCoverage.set(t.cardId, arr)
+    }
   }
 
   for (const t of transactions) {
