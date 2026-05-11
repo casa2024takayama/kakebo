@@ -139,10 +139,10 @@ export default function Import() {
       // 支払日がCSVに無いケース（AEON形式など）では、明細利用日の最大日から理論引落日を推定する
       const inferredFromDetails = (() => {
         if (!group || toImport.length === 0) return null
-        const latestUsageDate = [...toImport]
+        const sortedUsageDates = [...toImport]
           .map((t) => t.date)
           .sort((a, b) => a.localeCompare(b))
-          .at(-1)
+        const latestUsageDate = sortedUsageDates[sortedUsageDates.length - 1]
         if (!latestUsageDate) return null
         return getCycleForTransaction(latestUsageDate, group)
       })()

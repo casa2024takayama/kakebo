@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "ship:docs": "git add \"システム仕様書.md\" && git commit -m \"docs: update system specification\" && git push",
     "validate:test-data": "node scripts/validate-test-data.mjs"
@@ -29,6 +31,7 @@
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.9",
     "typescript": "^5.5.3",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^4.1.5"
   }
 }

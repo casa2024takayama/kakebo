@@ -5,6 +5,22 @@ Claude Code / Cursor の併用開発における、Claude Code参照用の統合
 
 ---
 
+## 2026-05-11 17:50 JST
+- 担当AI: Cursor
+- バージョン: v0.4.38
+- 概要:
+  - Vitest を導入し、日付計算・dedup回帰のユニットテストを追加
+  - GitHub Pages デプロイ前に `npm run test` を実行するよう CI を強化
+- 影響範囲:
+  - `package.json`
+  - `package-lock.json`
+  - `.github/workflows/deploy.yml`
+  - `tests/billingCycle.test.ts`
+  - `tests/withdrawalDate.test.ts`
+- 検証結果:
+  - `npm run test` 成功
+  - `npm run build` 成功
+
 ## 2026-05-11 17:35 JST
 - 担当AI: Cursor
 - バージョン: v0.4.38
