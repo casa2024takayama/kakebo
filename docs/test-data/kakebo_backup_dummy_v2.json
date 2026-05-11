@@ -1,0 +1,238 @@
+{
+  "app": "kakebo",
+  "version": 2,
+  "exportedAt": "2026-05-08T14:00:00.000Z",
+  "appVersion": "0.4.38",
+  "data": {
+    "categories": [
+      { "id": "food", "name": "食費", "budget": 45000, "color": "#1A6B4A" },
+      { "id": "transport", "name": "交通費", "budget": 18000, "color": "#2980B9" },
+      { "id": "daily", "name": "日用品", "budget": 14000, "color": "#8E44AD" },
+      { "id": "entertainment", "name": "娯楽・交際", "budget": 26000, "color": "#E5972A" },
+      { "id": "housing", "name": "住居費", "budget": 95000, "color": "#6C5CE7" },
+      { "id": "utilities", "name": "光熱通信", "budget": 20000, "color": "#00A8A8" },
+      { "id": "other", "name": "その他", "budget": 15000, "color": "#7F8C8D" }
+    ],
+    "billingGroups": [
+      {
+        "id": "bg_saison",
+        "name": "セゾン",
+        "closingDay": 10,
+        "withdrawalDay": 4,
+        "withdrawalMonthOffset": 1
+      },
+      {
+        "id": "bg_aeon",
+        "name": "イオン",
+        "closingDay": 10,
+        "withdrawalDay": 2,
+        "withdrawalMonthOffset": 1
+      },
+      {
+        "id": "bg_nicos",
+        "name": "ニコス（旧シェル）",
+        "closingDay": 5,
+        "withdrawalDay": 27,
+        "withdrawalMonthOffset": 0
+      }
+    ],
+    "cards": [
+      { "id": "card_saison_gold", "name": "セゾンゴールドAMEX", "billingGroupId": "bg_saison", "color": "#2E6B5A" },
+      { "id": "card_aeon", "name": "イオンカード", "billingGroupId": "bg_aeon", "color": "#8E44AD" },
+      { "id": "card_shell", "name": "シェルPonta", "billingGroupId": "bg_nicos", "color": "#C0392B" }
+    ],
+    "fixedCosts": [
+      { "id": "fc_rent", "name": "家賃", "amount": 82000, "categoryId": "housing", "day": 1 },
+      { "id": "fc_mobile", "name": "携帯", "amount": 6200, "categoryId": "utilities", "day": 15 },
+      { "id": "fc_netflix", "name": "Netflix", "amount": 1490, "categoryId": "entertainment", "day": 20 }
+    ],
+    "settings": {
+      "anthropicApiKey": "",
+      "darkMode": false,
+      "monthlyIncome": 320000,
+      "payDay": 25,
+      "payDayShiftRule": "before",
+      "testMode": false
+    },
+    "transactions": [
+      {
+        "id": "tx_income_2026_04_salary",
+        "amount": 320000,
+        "categoryId": "",
+        "memo": "給与 4月分",
+        "date": "2026-04-24",
+        "source": "manual",
+        "kind": "income"
+      },
+      {
+        "id": "tx_income_2026_05_salary",
+        "amount": 320000,
+        "categoryId": "",
+        "memo": "給与 5月分",
+        "date": "2026-05-25",
+        "source": "manual",
+        "kind": "income"
+      },
+      {
+        "id": "tx_noncard_util_electric_2026_05",
+        "amount": 4300,
+        "categoryId": "utilities",
+        "memo": "電気代",
+        "date": "2026-05-13",
+        "source": "manual",
+        "kind": "individual"
+      },
+      {
+        "id": "tx_noncard_util_water_2026_05",
+        "amount": 2800,
+        "categoryId": "utilities",
+        "memo": "水道代",
+        "date": "2026-05-22",
+        "source": "manual",
+        "kind": "individual"
+      },
+      {
+        "id": "tx_saison_ind_1",
+        "amount": 2980,
+        "categoryId": "food",
+        "memo": "スーパーA",
+        "date": "2026-04-12",
+        "source": "csv",
+        "cardId": "card_saison_gold",
+        "kind": "individual",
+        "actualWithdrawalDate": "2026-05-07",
+        "excludeFromWithdrawal": true
+      },
+      {
+        "id": "tx_saison_ind_2",
+        "amount": 1680,
+        "categoryId": "daily",
+        "memo": "ドラッグストアB",
+        "date": "2026-04-21",
+        "source": "csv",
+        "cardId": "card_saison_gold",
+        "kind": "individual",
+        "actualWithdrawalDate": "2026-05-07",
+        "excludeFromWithdrawal": true
+      },
+      {
+        "id": "tx_saison_bulk_2026_05",
+        "amount": 4660,
+        "categoryId": "other",
+        "memo": "セゾン請求一括（2026-05）",
+        "date": "2026-05-07",
+        "source": "csv",
+        "cardId": "card_saison_gold",
+        "kind": "bulk",
+        "billingMonth": "2026-05",
+        "actualWithdrawalDate": "2026-05-07"
+      },
+      {
+        "id": "tx_aeon_ind_1",
+        "amount": 530,
+        "categoryId": "transport",
+        "memo": "ＭＹＢ池ノ上駅",
+        "date": "2026-05-02",
+        "source": "csv",
+        "cardId": "card_aeon",
+        "kind": "individual",
+        "actualWithdrawalDate": "2026-06-02",
+        "excludeFromWithdrawal": true
+      },
+      {
+        "id": "tx_aeon_ind_2",
+        "amount": 1426,
+        "categoryId": "transport",
+        "memo": "ＭＹＢ池ノ上駅",
+        "date": "2026-04-29",
+        "source": "csv",
+        "cardId": "card_aeon",
+        "kind": "individual",
+        "actualWithdrawalDate": "2026-06-02",
+        "excludeFromWithdrawal": true
+      },
+      {
+        "id": "tx_aeon_bulk_2026_06",
+        "amount": 1956,
+        "categoryId": "other",
+        "memo": "イオンカード請求一括（2026-06）",
+        "date": "2026-06-02",
+        "source": "csv",
+        "cardId": "card_aeon",
+        "kind": "bulk",
+        "billingMonth": "2026-06",
+        "actualWithdrawalDate": "2026-06-02"
+      },
+      {
+        "id": "tx_nicos_ind_1",
+        "amount": 7800,
+        "categoryId": "transport",
+        "memo": "ガソリンスタンド",
+        "date": "2026-05-03",
+        "source": "csv",
+        "cardId": "card_shell",
+        "kind": "individual",
+        "actualWithdrawalDate": "2026-05-27",
+        "excludeFromWithdrawal": true
+      },
+      {
+        "id": "tx_nicos_bulk_2026_05",
+        "amount": 7800,
+        "categoryId": "other",
+        "memo": "シェルPonta請求一括（2026-05）",
+        "date": "2026-05-27",
+        "source": "csv",
+        "cardId": "card_shell",
+        "kind": "bulk",
+        "billingMonth": "2026-05",
+        "actualWithdrawalDate": "2026-05-27"
+      },
+      {
+        "id": "tx_refund_income_1",
+        "amount": 1200,
+        "categoryId": "",
+        "memo": "[返金] ネット通販キャンセル",
+        "date": "2026-05-18",
+        "source": "csv",
+        "kind": "income"
+      },
+      {
+        "id": "tx_manual_food_1",
+        "amount": 980,
+        "categoryId": "food",
+        "memo": "コンビニ",
+        "date": "2026-05-11",
+        "source": "manual",
+        "kind": "individual"
+      },
+      {
+        "id": "tx_manual_daily_1",
+        "amount": 2380,
+        "categoryId": "daily",
+        "memo": "洗剤・ティッシュ",
+        "date": "2026-05-14",
+        "source": "manual",
+        "kind": "individual"
+      },
+      {
+        "id": "tx_manual_ent_1",
+        "amount": 5400,
+        "categoryId": "entertainment",
+        "memo": "友人と食事",
+        "date": "2026-05-19",
+        "source": "manual",
+        "kind": "individual"
+      }
+    ],
+    "bankSnapshots": [
+      {
+        "id": "snap_mizuho_2026_05_10",
+        "source": "mizuho",
+        "date": "2026-05-10",
+        "amount": 184320,
+        "importedAt": "2026-05-10T03:00:00.000Z",
+        "note": "みずほ銀行CSV"
+      }
+    ]
+  }
+}

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "ship:docs": "git add \"システム仕様書.md\" && git commit -m \"docs: update system specification\" && git push"
+    "ship:docs": "git add \"システム仕様書.md\" && git commit -m \"docs: update system specification\" && git push",
+    "validate:test-data": "node scripts/validate-test-data.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.3",
